@@ -28,9 +28,9 @@ namespace gym_system.Domain.Entities.Members
             Name = name;
             Phone = phone;
             PasswordHash = passwordHash;
-            IsActived = true;
+            IsActived = true;                   //  會員是否註銷
             LastVisitDate = null;
-            CurrentTicketStatus = "UnActive";
+            CurrentTicketStatus = "UnActive";   //  用這個判斷是否進場
         }
 
 

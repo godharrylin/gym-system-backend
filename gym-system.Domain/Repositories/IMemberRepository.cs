@@ -1,23 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using gym_system.Domain.Entities.Members;
 
 namespace gym_system.Domain.Repositories
 {
     public interface IMemberRepository
     {
-        /// <summary>
-        ///  新增會員
-        /// </summary>
-        /// <param name="member"></param>
-        /// <returns></returns>
-        public Task AddAsync(Member member);
-
-        /// <summary>
-        /// 驗證電話號碼是否重複
-        /// </summary>
-        public Task<bool> CheckPhoneExistAsync(string phone);
-        
+        Task<bool> AnyPhoneExistsAsync(IReadOnlyList<string> phones, CancellationToken ct);
+        Task AddRangeAsync(IReadOnlyList<Member> members, CancellationToken ct);
+        Task<List<string>> GenerateIdsAsync(int count, CancellationToken ct);
     }
 }

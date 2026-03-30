@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Entities\Tickets\Ticket.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="EventHandler\" />
   </ItemGroup>
 

@@ -137,7 +137,7 @@
       • 目前會是Cash |  |
     | `order_items_total_amount` | Decimal | 這筆訂單應收的錢 |  |
     | `order_items_actual_amount` | Decimal | 這筆訂單實際收的錢 |  |
-    | `order_items_quantity` | int | **品項預設購買數量**
+    | `order_items_quantity` | int | **品項購買數量**
     票券
      • 月票 → 單位是天
      • 堂票 → 單位是堂
@@ -230,10 +230,10 @@
      • `new_promo` → 5
      |
     | `ticket_plan_kind_default_expire_days` | int | 預設到期天數
-    無期限票券用 -1
-     |   • `single`→ 1
+
+      • `single`→ 1
       • `monthly` → 30
-      • `coupon` → -
+      • `coupon` → 30
       • `pack_10` → 90
       • `pack_20` → 90
       • `new_promo`  → 30
@@ -242,6 +242,72 @@
     | `ticket_plan_kind_is_active` | boolean | 是否上架
       • `true` 上架
       • `false` 下架不顯示 |  |
+- 票券規則定義表 `ticket_plan_rule`
+    - 定義票券適用的規則，為了能夠讓前端畫面根據規則顯示可購買的票券。
+    - Create Table code
+        
+        ```sql
+        -- 1) Tag 字典表
+        CREATE TABLE ticket_plan_tag (
+            ticket_plan_rule_sn            VARCHAR(20)    NOT NULL PRIMARY KEY, -- TG_001
+            ticket_plan_rule_code          VARCHAR(50)    NOT NULL UNIQUE,      -- NEW_ONLY
+            ticket_plan_rule_name          NVARCHAR(100)  NOT NULL,             -- 新客限定
+            ticket_plan_rule_desc          NVARCHAR(255)  NULL,
+            ticket_plan_rule_is_active     BIT            NOT NULL DEFAULT 1,
+            ticket_plan_rule_create_dt     DATETIME2      NOT NULL DEFAULT SYSDATETIME(),
+            ticket_plan_rule_up_dt         DATETIME2      NOT NULL DEFAULT SYSDATETIME()
+        );
+        ```
+        
+    
+    | **欄位名稱** | **資料類型** | **說明** | **範例** |
+    | --- | --- | --- | --- |
+    | `ticket_plan_rule_sn` | varChar(PK) | 僅提供資料庫關聯使用格式: T_數字`TR_001` |  |
+    | `ticket_plan_rule_code` | Enum(Unique) | 票券規則代碼，唯一索引，提供工程師在程式碼中調用 
+      • `FAMILY_ELIGIBLE` 家庭方案
+      • `RENEWAL` 續約方案
+      • `NEW_ONLY` 新會員方案
+      • `HIDDEN` 特殊方案 |  |
+    | `ticket_plan_rule_name` | varChar | 票券規則名稱
+      • `FAMILY_ELIGIBLE` →家庭方案
+      • `RENEWAL`  →續約方案
+      • `NEW_ONLY`  →新會員方案
+      • `HIDDEN`  →特殊方案 |  |
+    | `ticket_plan_rule_desc` | varChar | 票券規則描述
+      • `FAMILY_ELIGIBLE` →95折優惠
+      • `RENEWAL`  → 續約優惠
+      • `NEW_ONLY`  →限定新會員使用
+      • `HIDDEN`  →特殊方案 |  |
+    | `ticket_plan_rule_is_active` | boolean | 票券規則是否啟用
+     • `true` 啟用
+      • `false` 不啟用 |  |
+    | `ticket_plan_rule_create_dt` | DateTime | 票券規則建立日期 |  |
+    | `ticket_plan_rule_up_dt` | DateTime | 票券規則更新日期 |  |
+- 票券種類規則關聯表 `ticket_plan_kind_rule`
+    - 定義哪一種票券套用哪些規則。一種票券可以適用多個規則；一種規則可以用在多個票券。
+    - `ticket_plan_kind_sn` , `ticket_plan_rule_sn` 當複合主鍵。
+    - Create Table code
+        
+        ```sql
+        -- 2) 關聯表：一個 ticket_plan_kind 可有多個 rule
+        CREATE TABLE ticket_plan_kind_rule (
+            ticket_plan_kind_sn           VARCHAR(20)    NOT NULL, -- FK -> ticket_plan_kind.ticket_plan_kind_sn
+            ticket_plan_tag_sn            VARCHAR(20)    NOT NULL, -- FK -> ticket_plan_tag.ticket_plan_tag_sn
+            ticket_plan_kind_tag_create_dt DATETIME2     NOT NULL DEFAULT SYSDATETIME(),
+            CONSTRAINT PK_ticket_plan_kind_rule PRIMARY KEY (ticket_plan_kind_sn, ticket_plan_rule_sn),
+            CONSTRAINT FK_tpkt_kind FOREIGN KEY (ticket_plan_kind_sn) REFERENCES ticket_plan_kind(ticket_plan_kind_sn),
+            CONSTRAINT FK_tpkt_tag  FOREIGN KEY (ticket_plan_rule_sn)  REFERENCES ticket_plan_rule(ticket_plan_rule_sn)
+        );
+        ```
+        
+    
+    | **欄位名稱** | **資料類型** | **說明** | **範例** |
+    | --- | --- | --- | --- |
+    | `ticket_plan_kind_sn` | varChar(PK)、FK | 票券種類，必須來自
+    `ticket_plan_kind.ticket_plan_kind_sn` |  |
+    | `ticket_plan_rule_sn` | VarChar(PK)、FK | 票券規則種類，必須來自
+    `ticket_plan_rule.ticket_plan_rule_sn` |  |
+    | `ticket_plan_kind_rule_create_dt`  |  |  |  |
 - 產品種類表 `products` (目前暫時用不到)
     
     

@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Api/gym-system.Api.csproj" />
   <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Application/gym-system.Application.csproj" />
+  <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Application.Tests/gym-system.Application.Tests.csproj" />
   <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Domain/gym-system.Domain.csproj" />
   <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Infrastructures/gym-system.Infrastructure.csproj" />
 </Solution>

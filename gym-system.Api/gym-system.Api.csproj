@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\gym-system.Application\gym-system.Application.csproj" />
     <ProjectReference Include="..\gym-system.Infrastructures\gym-system.Infrastructure.csproj" />
   </ItemGroup>
 
