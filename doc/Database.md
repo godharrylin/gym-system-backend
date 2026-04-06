@@ -137,7 +137,7 @@
       • 目前會是Cash |  |
     | `order_items_total_amount` | Decimal | 這筆訂單應收的錢 |  |
     | `order_items_actual_amount` | Decimal | 這筆訂單實際收的錢 |  |
-    | `order_items_quantity` | int | **品項預設購買數量**
+    | `order_items_quantity` | int | **品項購買數量**
     票券
      • 月票 → 單位是天
      • 堂票 → 單位是堂
@@ -176,72 +176,192 @@
     | **`remark`** | Text | 備註（選填） | 學生現場付現、手動折扣 60 元 |
 - 票券種類表 `ticket_plan_kind`
     - 負責分類票券種類
+    - Create Table code
+        
+        ```sql
+        CREATE TABLE dbo.ticket_plan_kind (
+            ticket_plan_kind_sn INT IDENTITY(1,1) PRIMARY KEY,  -- 主鍵流水號
+        
+            ticket_plan_kind_code NVARCHAR(50) NOT NULL,        -- 代碼
+            ticket_plan_kind_type NVARCHAR(20) NOT NULL,        -- 類型
+            ticket_plan_kind_cname NVARCHAR(100) NOT NULL,       -- 中文名稱
+        
+            ticket_plan_kind_price DECIMAL(10,2) NOT NULL,      -- 價格
+            ticket_plan_kind_default_credit INT NOT NULL,       -- 點數
+            ticket_plan_kind_default_expire_days INT NOT NULL,  -- 有效天數
+        
+            ticket_plan_kind_default_is_active varchar(1) NOT NULL     -- 是否啟用
+        )
+        
+        INSERT INTO dbo.ticket_plan_kind (
+            ticket_plan_kind_code,
+            ticket_plan_kind_type,
+            ticket_plan_kind_cname,
+            ticket_plan_kind_price,
+            ticket_plan_kind_default_credit,
+            ticket_plan_kind_default_expire_days,
+            ticket_plan_kind_default_is_active
+        )
+        VALUES
+        -- 單次與抵用券
+        ('SINGLE',      'PACK',   '單次票',       250,   1,   1,   'Y'),
+        ('COUPON',      'PACK',   '折抵票',       0,     1,   30,  'Y'),
+        ('FREE_TRIAL',  'PACK',   '免費體驗票',    0,     1,   14,   'Y'),
+        
+        -- 堂票系列 (PACK)
+        ('PACK_10',     'PACK',   '10堂票',       2300,  10,  90,  'Y'),
+        ('PACK_20',     'PACK',   '20堂票',       4400,  20,  90,  'Y'),
+        ('NEW_PROMO',   'PACK',   '5堂票-新朋友',  1200,  5,   30,  'Y'),
+        
+        -- 月票系列 (M_PASS)
+        ('MONTHLY',     'M_PASS', '月票',            1960,  99999, 30,  'Y'),
+        ('RENEW',       'M_PASS', '續約票',          1860,  99999, 30,  'Y'),
+        ('B6G1',        'M_PASS', '半年票 買6送1',   11760, 99999, 210, 'Y'),
+        ('B12G2',       'M_PASS', '年票 買12送2',    23520, 99999, 420, 'Y');
+        ```
+        
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
-    | `ticket_plan_kind_sn` | varChar(PK) | 僅提供資料庫關聯使用
-    格式: T_數字
-    `T_001` |  |
+    | `ticket_plan_kind_sn` | nVarChar(PK) | 僅提供資料庫關聯使用 |  |
     | `ticket_plan_kind_code` | Enum | 票券代碼，唯一索引，提供工程師在程式碼中調用
-      • `single`(單次)
-      • `coupon` (抵用券)
-      • `pack_10` (10堂票)
-      • `pack_20` (20堂票)
-      • `new_promo` (是否為新客 ，用於"5堂-新朋友"方案，這個方案只能買一次)
-      • `renew` (續約票，在過期後10天繳費有優惠價格)
-    • `free_trial` (免費體驗票) |  |
+      • `SINGLE`(單次)
+      • `COUPON`(折抵票)
+      • `PACK_10`(10堂票)
+      • `PACK_20`(20堂票)
+      • `NEW_PROMO`(是否為新客 ，用於"5堂-新朋友"方案，這個方案只能買一次)
+      • `RENEW`(續約票，在過期後10天繳費有優惠價格)
+    • `MONTHLY`月票
+    • `B12G2` 買12送2月票
+    • `B6G1` 買6送1月票
+    • `FREE_TRIAL`(免費體驗票) |  |
     | `ticket_plan_kind_type` | Enum | 票券種類
-      • `Pack` (堂票) 
-      • `M_Pass`(月票) |  • `Pack` (堂票)
-        • `single`
-        • `coupon` 
-        • `pack_10` 
-        • `pack_20` 
-        • `free_trial` 
-        • `new_promo` 
-     • `M_Pass`(月票)
-        • `renew` 
-        • `monthly`  |
-    | `ticket_plan_kind_name` | varChar | 票券名稱
-      • `single`→ 單次
-      • `monthly` → 月票
-      • `coupon` → 抵用券
-      • `pack_10` → 10堂票
-      • `pack_20` → 20堂票
-      • `new_promo`  → 新朋友方案
-      • `renew` → 續約票
-      • `free_trial` → 免費體驗票 |  |
+      • `PACK`(堂票) 
+      • `M_PASS`(月票) |  • `PACK`(堂票)
+        • `SINGLE`
+        • `COUPON` 
+        • `PACK_10`
+        • `PACK_20`
+        • `FREE_TRIAL`
+        • `NEW_PROMO`
+     • `M_PASS`(月票)
+        • `RENEW`
+        • `MONTHLY`
+        • `B12G2` 
+        • `B6G1`  |
+    | `ticket_plan_kind_cname` | varChar | 票券名稱
+      • `SINGLE`→ 單次
+      • `MONTHLY`→ 月票
+      • `COUPON` → 抵用券
+      • `PACK_10`→ 10堂票
+      • `PACK_20`→ 20堂票
+      • `NEW_PROMO`→ 新朋友方案
+      • `RENEW`→ 續約票
+      • `FREE_TRIAL`→ 免費體驗
+    票
+      • `B12G2` →買12送2月票
+      • `B6G1` →買6送1月票 |  |
     | `ticket_plan_kind_price` | int | 票券價格
-      • `single`→ 250
-      • `monthly` → 1960
-      • `coupon` → 0
-      • `pack_10` → 2300
-      • `pack_20` → 4400
-      • `new_promo`  → 1200
-      • `renew` → 1860 
-      • `free_trial` → 0 |  |
+      • `SINGLE`→ 250
+      • `MONTHLY`→ 1960
+      • `COUPON` → 0
+      • `PACK_10`→ 2300
+      • `PACK_20`→ 4400
+      • `NEW_PROMO`→ 1200
+      • `RENEW`→ 1860 
+      • `FREE_TRIAL`→ 0
+      • `B12G2` →23520
+      • `B6G1` → 11760 |  |
     | `ticket_plan_kind_default_credit` | Decimal | 預設使用次數
-    月票一律999 |  • `M_Pass` → 999
-     • `single`→ 1
-     • `coupon` → 1
-     • `pack_10` → 10
-     • `pack_20` → 20
-     • `free_trial` → 1
-     • `new_promo` → 5
+    月票一律999 |  • `M_PASS`→ 99999
+     • `SINGLE`→ 1
+     • `COUPON` → 1
+     • `PACK_10`→ 10
+     • `PACK_20`→ 20
+     • `FREE_TRIAL`→ 1
+     • `NEW_PROMO`→ 5
      |
-    | `ticket_plan_kind_default_expire_days` | int | 預設到期天數
-    無期限票券用 -1
-     |   • `single`→ 1
-      • `monthly` → 30
-      • `coupon` → -
-      • `pack_10` → 90
-      • `pack_20` → 90
-      • `new_promo`  → 30
-      • `renew` → 30
-      • `free_trial` → 1 |
-    | `ticket_plan_kind_is_active` | boolean | 是否上架
-      • `true` 上架
-      • `false` 下架不顯示 |  |
+    | `ticket_plan_kind_default_expire_days` | int | 預設到期天數 |   • `SINGLE`→ 1
+      • `MONTHLY`→ 30
+      • `COUPON` → 30
+      • `PACK_10`→ 90
+      • `PACK_20`→ 90
+      • `NEW_PROMO`→ 30
+      • `RENEW`→ 30
+      • `FREE_TRIAL`→ 14
+      • `B12G2` → 420
+      • `B6G1` → 210 |
+    | `ticket_plan_kind_is_active` | varChar(1) | 是否上架
+      • `Y`上架
+      • `N`下架不顯示 |  |
+- 規則定義表 `plan_rule`
+    - 定義產品(票券、商品、課程)適用的規則，為了能夠讓前端畫面根據規則顯示可購買的票券。
+    - Create Table code
+        
+        ```sql
+        -- 1) Tag 字典表
+        CREATE TABLE ticket_plan_tag (
+            ticket_plan_rule_sn            VARCHAR(20)    NOT NULL PRIMARY KEY, -- TG_001
+            ticket_plan_rule_code          VARCHAR(50)    NOT NULL UNIQUE,      -- NEW_ONLY
+            ticket_plan_rule_name          NVARCHAR(100)  NOT NULL,             -- 新客限定
+            ticket_plan_rule_desc          NVARCHAR(255)  NULL,
+            ticket_plan_rule_is_active     BIT            NOT NULL DEFAULT 1,
+            ticket_plan_rule_create_dt     DATETIME2      NOT NULL DEFAULT SYSDATETIME(),
+            ticket_plan_rule_up_dt         DATETIME2      NOT NULL DEFAULT SYSDATETIME()
+        );
+        ```
+        
+    
+    | **欄位名稱** | **資料類型** | **說明** | **範例** |
+    | --- | --- | --- | --- |
+    | `plan_rule_sn` | varChar(PK) | 僅提供資料庫關聯使用格式: R_數字`R_001` |  |
+    | `plan_rule_code` | Enum(Unique) | 規則代碼，唯一索引，提供工程師在程式碼中調用 
+      • `FAMILY_ELIGIBLE` 家庭方案
+      • `RENEWAL` 續約方案
+      • `NEW_ONLY` 新會員方案
+      • `HIDDEN` 特殊方案 | • `single` → 無規則
+    • `monthly` → `FAMILY_ELIGIBLE`
+    • `renew` -> `RENEWAL`, `FAMILY_ELIGIBLEnew_promo` -> `NEW_ONLYfree_trial` -> `NEW_ONLYpack_10` -> `FAMILY_ELIGIBLEpack_20` -> `FAMILY_ELIGIBLEcoupon`（或 custom） -> `HIDDEN` |
+    | `plan_rule_name` | varChar | 規則名稱
+      • `FAMILY_ELIGIBLE` →家庭方案
+      • `RENEWAL`  →續約方案
+      • `NEW_ONLY`  →新會員方案
+      • `HIDDEN`  →特殊方案 |  |
+    | `plan_rule_desc` | varChar | 規則描述
+      • `FAMILY_ELIGIBLE` →95折優惠
+      • `RENEWAL`  → 續約優惠
+      • `NEW_ONLY`  →限定新會員使用
+      • `HIDDEN`  →特殊方案 |  |
+    | `plan_rule_is_active` | boolean | 規則是否啟用，全域開關
+     • `true` 啟用
+      • `false` 不啟用 |  |
+    | `plan_rule_create_dt` | DateTime | 規則建立日期 |  |
+    | `plan_rule_up_dt` | DateTime | 規則更新日期 |  |
+- 票券種類規則關聯表 `ticket_plan_kind_rule`
+    - 定義哪一種票券套用哪些規則。一種票券可以適用多個規則；一種規則可以用在多個票券。
+    - `ticket_plan_kind_sn` , `ticket_plan_rule_sn` 當複合主鍵。
+    - Create Table code
+        
+        ```sql
+        -- 2) 關聯表：一個 ticket_plan_kind 可有多個 rule
+        CREATE TABLE ticket_plan_kind_rule (
+            ticket_plan_kind_sn           VARCHAR(20)    NOT NULL, -- FK -> ticket_plan_kind.ticket_plan_kind_sn
+            ticket_plan_tag_sn            VARCHAR(20)    NOT NULL, -- FK -> ticket_plan_tag.ticket_plan_tag_sn
+            ticket_plan_kind_tag_create_dt DATETIME2     NOT NULL DEFAULT SYSDATETIME(),
+            CONSTRAINT PK_ticket_plan_kind_rule PRIMARY KEY (ticket_plan_kind_sn, ticket_plan_rule_sn),
+            CONSTRAINT FK_tpkt_kind FOREIGN KEY (ticket_plan_kind_sn) REFERENCES ticket_plan_kind(ticket_plan_kind_sn),
+            CONSTRAINT FK_tpkt_tag  FOREIGN KEY (ticket_plan_rule_sn)  REFERENCES ticket_plan_rule(ticket_plan_rule_sn)
+        );
+        ```
+        
+    
+    | **欄位名稱** | **資料類型** | **說明** | **範例** |
+    | --- | --- | --- | --- |
+    | `ticket_plan_kind_sn` | varChar(PK)、FK | 票券種類，必須來自
+    `ticket_plan_kind.ticket_plan_kind_sn` |  |
+    | `plan_rule_sn` | VarChar(PK)、FK | 規則種類，必須來自
+    `plan_rule.ticket_plan_rule_sn` |  |
+    | `ticket_plan_kind_rule_create_dt`  |  |  |  |
 - 產品種類表 `products` (目前暫時用不到)
     
     

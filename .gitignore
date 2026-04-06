@@ -4,3 +4,6 @@
 
 # 忽略 Visual Studio 產生的設定與暫存
 .vs/
+
+
+.dotnet/

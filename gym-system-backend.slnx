@@ -1,6 +1,12 @@
 <Solution>
-  <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Api/gym-system.Api.csproj" />
-  <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Application/gym-system.Application.csproj" />
-  <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Domain/gym-system.Domain.csproj" />
-  <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/gym-system.Infrastructures/gym-system.Infrastructure.csproj" />
+  <Folder Name="/tests/">
+    <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/tests/gym-system.Application.Tests/gym-system.Application.Tests.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/src/gym-system.Api/gym-system.Api.csproj" />
+	<Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/src/gym-system.Application/gym-system.Application.csproj" />
+	<Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/src/gym-system.Domain/gym-system.Domain.csproj" />
+	<Project Path="D:/HarryLin/GitHub/Web/gym-system-backend/src/gym-system.Infrastructures/gym-system.Infrastructure.csproj" />
+  </Folder>
+
 </Solution>
