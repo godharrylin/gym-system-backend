@@ -77,8 +77,8 @@ namespace gym_system.Application.Tests
 
             Assert.Single(sut.MemberRepository.StoredMembers);
             Assert.Single(sut.ProfileRepository.StoredProfiles);
-            Assert.Equal(0, sut.OrderRepository.StoredOrders.Count);
-            Assert.Equal(0, sut.PassRepository.StoredPasses.Count);
+            Assert.Empty(sut.OrderRepository.StoredOrders);
+            Assert.Empty(sut.PassRepository.StoredPasses);
             Assert.Equal(1, sut.UnitOfWork.CommitCount);
         }
 
