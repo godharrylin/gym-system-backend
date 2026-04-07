@@ -1,24 +1,48 @@
+using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
 using gym_system.Domain.Repositories;
+using gym_system.Infrastructures.Connections;
+using gym_system.Infrastructures.Queries.TicketPlans;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace gym_system.Infrastructures
 {
     public static class DependencyInjection
     {
-        public static IServiceCollection AddInfrastructure(this IServiceCollection services)
+        //  this IServiceCollection services 是擴充方法
+        public static IServiceCollection AddInfrastructureInMemory(this IServiceCollection services)
         {
+            services.AddCommonInfrastructure();
+
             services.AddSingleton<InMemoryStore>();
             services.AddScoped<IMemberRepository, InMemoryMemberRepository>();
             services.AddScoped<IStudentProfileRepository, InMemoryStudentProfileRepository>();
             services.AddScoped<ITicketPlanRepository, InMemoryTicketPlanRepository>();
             services.AddScoped<IOrderRepository, InMemoryOrderRepository>();
             services.AddScoped<ITicketPassRepository, InMemoryTicketPassRepository>();
+            
+            services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
+            services.AddScoped<ITicketPlanCatalogQuerySerivce, DapperTicketPlanCatalogQueryService>();
+
+            return services;
+        }
+
+        public static IServiceCollection AddInfrastructureSql(this IServiceCollection services)
+        {
+            services.AddCommonInfrastructure();
+
+            services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
+            services.AddScoped<ITicketPlanCatalogQuerySerivce, DapperTicketPlanCatalogQueryService>();
+
+            return services;
+        }
+
+        private static IServiceCollection AddCommonInfrastructure(this IServiceCollection services)
+        {
             services.AddScoped<IUnitOfWork, NoopUnitOfWork>();
             services.AddScoped<IClock, SystemClock>();
-
             return services;
         }
     }

@@ -6,8 +6,13 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
-builder.Services.AddScoped<RegisterMemberHandler>();
-builder.Services.AddInfrastructure();
+/* SQL Connection */
+builder.Services.AddInfrastructureSql();
+
+/* Mock Connection */
+//builder.Services.AddScoped<RegisterMemberHandler>();
+//builder.Services.AddInfrastructureInMemory();
+
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 

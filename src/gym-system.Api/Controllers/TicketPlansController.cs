@@ -29,7 +29,7 @@ namespace gym_system.Api.Controllers
                     Name = x.Name,
                     Price = x.Price == 0 ? "Free" : $"${x.Price:0}",
                     Days = x.Days,
-                    Sessions = x.Sessions,
+                    Sessions = x.Sessions.ToString(),
                     Type = x.Type,
                     Tags = x.Tags?.ToArray() ?? Array.Empty<string>(),
                     Description = x.Description

@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
+﻿
 namespace gym_system.Application.TicketPlansUseCase.Queries
 {
     //  查詢顯示可購買票券清單
