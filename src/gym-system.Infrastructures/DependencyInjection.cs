@@ -4,6 +4,7 @@ using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
 using gym_system.Domain.Repositories;
 using gym_system.Infrastructures.Connections;
+using gym_system.Infrastructures.Dapper;
 using gym_system.Infrastructures.Queries.TicketPlans;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,6 +13,7 @@ namespace gym_system.Infrastructures
     public static class DependencyInjection
     {
         //  this IServiceCollection services 是擴充方法
+        //  Mock　Data
         public static IServiceCollection AddInfrastructureInMemory(this IServiceCollection services)
         {
             services.AddCommonInfrastructure();
@@ -29,6 +31,7 @@ namespace gym_system.Infrastructures
             return services;
         }
 
+        //  MS SQL
         public static IServiceCollection AddInfrastructureSql(this IServiceCollection services)
         {
             services.AddCommonInfrastructure();
@@ -39,10 +42,12 @@ namespace gym_system.Infrastructures
             return services;
         }
 
+        //  Common Need
         private static IServiceCollection AddCommonInfrastructure(this IServiceCollection services)
         {
             services.AddScoped<IUnitOfWork, NoopUnitOfWork>();
             services.AddScoped<IClock, SystemClock>();
+            DapperConfig.Register();
             return services;
         }
     }

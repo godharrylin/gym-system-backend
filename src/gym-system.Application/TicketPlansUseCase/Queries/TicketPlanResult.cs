@@ -29,7 +29,7 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
         /// <summary>
         /// 票券方案標籤，用來控制畫面顯示
         /// </summary>
-        public string[]? Tags { get; set; }
+        public string[]? Tags { get; set; } = new string[0];
         public string? Description { get; set; }
         
     }

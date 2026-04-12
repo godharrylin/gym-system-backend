@@ -300,15 +300,27 @@
         
         ```sql
         -- 1) Tag 字典表
-        CREATE TABLE ticket_plan_tag (
-            ticket_plan_rule_sn            VARCHAR(20)    NOT NULL PRIMARY KEY, -- TG_001
-            ticket_plan_rule_code          VARCHAR(50)    NOT NULL UNIQUE,      -- NEW_ONLY
-            ticket_plan_rule_name          NVARCHAR(100)  NOT NULL,             -- 新客限定
-            ticket_plan_rule_desc          NVARCHAR(255)  NULL,
-            ticket_plan_rule_is_active     BIT            NOT NULL DEFAULT 1,
-            ticket_plan_rule_create_dt     DATETIME2      NOT NULL DEFAULT SYSDATETIME(),
-            ticket_plan_rule_up_dt         DATETIME2      NOT NULL DEFAULT SYSDATETIME()
+        CREATE TABLE plan_rule (
+            plan_rule_sn            VARCHAR(20)    NOT NULL PRIMARY KEY, -- R_001
+            plan_rule_code          VARCHAR(50)    NOT NULL UNIQUE,      -- NEW_ONLY
+            plan_rule_name          NVARCHAR(100)  NOT NULL,             -- 新客限定
+            plan_rule_desc          NVARCHAR(255)  NULL,
+            plan_rule_is_active     VARCHAR(2)     NOT NULL DEFAULT 'Y',
+            plan_rule_create_dt     DATETIME2      NOT NULL DEFAULT SYSDATETIME(),
+            plan_rule_up_dt         DATETIME2      NOT NULL DEFAULT SYSDATETIME()
         );
+        
+        INSERT INTO plan_rule (
+            plan_rule_sn,
+            plan_rule_code,
+            plan_rule_name,
+            plan_rule_desc
+        )
+        VALUES
+        ('R_001', 'NEW_ONLY', '新會員限定', '只能讓新會員使用'),
+        ('R_002', 'RENEWAL', '續約方案', '符合續約資格可使用'),
+        ('R_003', 'FAMILY_ELIGIBLE', '家庭方案', '符合家庭方案資格'),
+        ('R_004', 'HIDDEN', '特殊方案', '特殊方案');
         ```
         
     
@@ -319,9 +331,7 @@
       • `FAMILY_ELIGIBLE` 家庭方案
       • `RENEWAL` 續約方案
       • `NEW_ONLY` 新會員方案
-      • `HIDDEN` 特殊方案 | • `single` → 無規則
-    • `monthly` → `FAMILY_ELIGIBLE`
-    • `renew` -> `RENEWAL`, `FAMILY_ELIGIBLEnew_promo` -> `NEW_ONLYfree_trial` -> `NEW_ONLYpack_10` -> `FAMILY_ELIGIBLEpack_20` -> `FAMILY_ELIGIBLEcoupon`（或 custom） -> `HIDDEN` |
+      • `HIDDEN` 特殊方案 |  |
     | `plan_rule_name` | varChar | 規則名稱
       • `FAMILY_ELIGIBLE` →家庭方案
       • `RENEWAL`  →續約方案
@@ -343,17 +353,39 @@
     - Create Table code
         
         ```sql
-        -- 2) 關聯表：一個 ticket_plan_kind 可有多個 rule
         CREATE TABLE ticket_plan_kind_rule (
-            ticket_plan_kind_sn           VARCHAR(20)    NOT NULL, -- FK -> ticket_plan_kind.ticket_plan_kind_sn
-            ticket_plan_tag_sn            VARCHAR(20)    NOT NULL, -- FK -> ticket_plan_tag.ticket_plan_tag_sn
-            ticket_plan_kind_tag_create_dt DATETIME2     NOT NULL DEFAULT SYSDATETIME(),
-            CONSTRAINT PK_ticket_plan_kind_rule PRIMARY KEY (ticket_plan_kind_sn, ticket_plan_rule_sn),
-            CONSTRAINT FK_tpkt_kind FOREIGN KEY (ticket_plan_kind_sn) REFERENCES ticket_plan_kind(ticket_plan_kind_sn),
-            CONSTRAINT FK_tpkt_tag  FOREIGN KEY (ticket_plan_rule_sn)  REFERENCES ticket_plan_rule(ticket_plan_rule_sn)
+            ticket_plan_kind_sn            INT          NOT NULL,
+            ticket_plan_rule_sn            VARCHAR(20)  NOT NULL,
+            ticket_plan_kind_tag_create_dt DATETIME2    NOT NULL DEFAULT SYSDATETIME(),
+        
+            CONSTRAINT PK_ticket_plan_kind_rule 
+                PRIMARY KEY (ticket_plan_kind_sn, ticket_plan_rule_sn),
+        
+            CONSTRAINT FK_tpkt_kind 
+                FOREIGN KEY (ticket_plan_kind_sn) 
+                REFERENCES ticket_plan_kind(ticket_plan_kind_sn),
+        
+            CONSTRAINT FK_tpkt_rule  
+                FOREIGN KEY (ticket_plan_rule_sn)  
+                REFERENCES plan_rule(plan_rule_sn)
         );
         ```
         
+    - 目前票券對應的方案表
+        
+        
+        | **票券名稱 (Name)** | **票種 (Type)** | **目前的 Tags 設定** | **這些 Tags 產生的影響** |
+        | --- | --- | --- | --- |
+        | 單次票 (Single Pass) | 次數票 (SESSION) | [] (無) | 所有人皆可看見、購買。不支援家庭方案。 |
+        | 月票 (Monthly) | 期限票 (MONTHLY) | ['FAMILY_ELIGIBLE'] | 可用於家庭方案折扣。 |
+        | 半年票 買6送1 (7 Months) | 期限票 (MONTHLY) | ['FAMILY_ELIGIBLE'] | 可用於家庭方案折扣。 |
+        | 年票 買12送2 (14 Months) | 期限票 (MONTHLY) | ['FAMILY_ELIGIBLE'] | 可用於家庭方案折扣。 |
+        | 續約票 (Renewal) | 期限票 (MONTHLY) | ['RENEWAL', 'FAMILY_ELIGIBLE'] | 限舊會員續約時才會顯示。可用於家庭方案折扣。 |
+        | 5堂票-新朋友 (Short Trial) | 次數票 (SESSION) | ['NEW_ONLY'] | 限新會員才會顯示。不支援家庭方案。 |
+        | 免費體驗票 (Free Trial) | 次數票 (SESSION) | ['NEW_ONLY'] | 限新會員才會顯示。不支援家庭方案。 |
+        | 10堂票 (10 Sessions) | 次數票 (SESSION) | ['FAMILY_ELIGIBLE'] | 可用於家庭方案折扣。 |
+        | 20堂票 (20 Sessions) | 次數票 (SESSION) | ['FAMILY_ELIGIBLE'] | 可用於家庭方案折扣。 |
+        | 折抵票 (Custom) | 次數票 (SESSION) | ['HIDDEN'] | （預計）在前台結帳介面中要被隱藏起來，僅供內部邏輯替換使用。 |
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
@@ -361,7 +393,7 @@
     `ticket_plan_kind.ticket_plan_kind_sn` |  |
     | `plan_rule_sn` | VarChar(PK)、FK | 規則種類，必須來自
     `plan_rule.ticket_plan_rule_sn` |  |
-    | `ticket_plan_kind_rule_create_dt`  |  |  |  |
+    | `ticket_plan_kind_rule_create_dt`  | DateTime | 該規則建立日期 |  |
 - 產品種類表 `products` (目前暫時用不到)
     
     
