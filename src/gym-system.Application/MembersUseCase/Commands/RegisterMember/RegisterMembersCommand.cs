@@ -19,6 +19,13 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
     {
         public string TicketPlanKindId { get; init; } = string.Empty;
         public DateOnly ActivationDate { get; init; }
-        public PaymentState PaymentStatus { get; init; }
+        public RegisterPaymentStatus PaymentStatus { get; init; }
     }
+
+    public enum RegisterPaymentStatus
+    {
+        Paid = 1,
+        UnPaid = 2
+    }
+
 }
