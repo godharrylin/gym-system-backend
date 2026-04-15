@@ -1,5 +1,4 @@
-﻿using gym_system.Application.Service;
-using gym_system.Domain.Entities.Users;
+﻿using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Repositories;
 using gym_system.Domain.Enums;
 
@@ -26,12 +25,14 @@ namespace gym_system.Application.InstructorUseCase.Command.CreateInstructor
         public async Task<bool> Handle(CreateInstructorCommand command, CancellationToken ct)
         {
             var phone = command.Phone.Trim();
-            var user = await _userRepository.FindUserByPhone(phone, ct);
+            
             var createDay = _clock.Now();
 
             await _unitOfWork.BeginAsync(ct);
             try
             {
+                var user = await _userRepository.FindUserByPhone(phone, ct);
+                //  如果輸入的電話號碼還沒被註冊，先註冊user
                 if (user == null)
                 {
                     var id = await _userRepository.GenerateIdsAsync(1, ct);
@@ -41,24 +42,42 @@ namespace gym_system.Application.InstructorUseCase.Command.CreateInstructor
 
                     if (status == false)
                     {
-                        throw new InvalidOperationException("User Create Fail");
+                        throw new InvalidOperationException("[CreateInstructor Handle]: User Create Fail");
                     }
                 }
 
                 var userId = user.Id;
-                //  判斷是否有Role，如果沒有就建立
-                var hasRole = await _roleRepository.HasRoleAsync(userId, UserRoleCode.Instructor);
-                if (!hasRole)
+
+                var role = await _roleRepository.CheckRoleAsync(userId, UserRoleCode.Instructor);
+                var result = false;
+                if (role == null)
                 {
-                    var role = UserRole.Assign(userId, UserRoleCode.Instructor, createDay, true);
-                    var result = await _roleRepository.AddRoleAsync(role);
-                    await _unitOfWork.CommitAsync(ct);
-                    return result;
+                    // 情境 1：完全沒有角色紀錄 -> 新增
+                    role = UserRole.Assign(userId, UserRoleCode.Instructor, createDay, true);
+                    result = await _roleRepository.AddRoleAsync(role, UserRoleCode.Instructor, ct);
+                }
+                else if(role.IsActived == false)
+                {
+                    // 情境 2：有紀錄但被停用了 -> 重新啟用
+                    result = await _roleRepository.ReactiveRole(userId, UserRoleCode.Instructor, ct);
                 }
                 else
                 {
-                    return true;
+                    // 情境 3：已經是活躍的教練了 -> 直接視為成功 (冪等性設計)
+                    result = true;
                 }
+
+                if (result)
+                {
+                    await _unitOfWork.CommitAsync(ct);
+                }
+                else
+                {
+                    await _unitOfWork.RollbackAsync(ct);
+                }
+
+                return result;
+
             }
             catch
             {
