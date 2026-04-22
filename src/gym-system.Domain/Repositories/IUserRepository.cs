@@ -13,6 +13,6 @@ namespace gym_system.Domain.Repositories
         Task<bool> AnyPhoneExistsAsync(IReadOnlyList<string> phones, CancellationToken ct);
         Task<bool> AddRangeAsync(IReadOnlyList<User> members, CancellationToken ct);
         Task<List<string>> GenerateIdsAsync(int count, CancellationToken ct);
-        Task<User> FindUserByPhone(string phone, CancellationToken ct);
+        Task<User?> FindUserByPhone(string phone, CancellationToken ct);
     }
 }

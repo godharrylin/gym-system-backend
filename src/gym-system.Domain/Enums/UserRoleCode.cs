@@ -2,9 +2,9 @@
 {
     public enum UserRoleCode
     {
-        Student = 1,
+        Staff = 1,
         Instructor = 2,
-        Staff,
+        Student,
         Admin
     }
 }

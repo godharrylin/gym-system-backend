@@ -36,7 +36,7 @@ namespace gym_system.Application.InstructorUseCase.Command.CreateInstructor
                 if (user == null)
                 {
                     var id = await _userRepository.GenerateIdsAsync(1, ct);
-                    user = User.Create(id[0], command.Name, phone, phone);
+                    user = User.Create(id[0], command.Name.Trim(), phone, phone);
                     //  建立 User
                     var status = await _userRepository.AddRangeAsync(new[] { user }, ct);
 
@@ -48,22 +48,22 @@ namespace gym_system.Application.InstructorUseCase.Command.CreateInstructor
 
                 var userId = user.Id;
 
-                var role = await _roleRepository.CheckRoleAsync(userId, UserRoleCode.Instructor);
+                var role = await _roleRepository.GetUserRoleAsync(userId, UserRoleCode.Instructor, ct);
                 var result = false;
                 if (role == null)
                 {
                     // 情境 1：完全沒有角色紀錄 -> 新增
                     role = UserRole.Assign(userId, UserRoleCode.Instructor, createDay, true);
-                    result = await _roleRepository.AddRoleAsync(role, UserRoleCode.Instructor, ct);
+                    result = await _roleRepository.AddRoleAsync(role, ct);
                 }
-                else if(role.IsActived == false)
+                else if(role.IsActive == false)
                 {
                     // 情境 2：有紀錄但被停用了 -> 重新啟用
-                    result = await _roleRepository.ReactiveRole(userId, UserRoleCode.Instructor, ct);
+                    result = await _roleRepository.ReactiveRole(userId, role.RoleCode, ct);
                 }
                 else
                 {
-                    // 情境 3：已經是活躍的教練了 -> 直接視為成功 (冪等性設計)
+                    // 情境 3：已經是啟用中指導老師了 -> 直接視為成功 (冪等性設計)
                     result = true;
                 }
 

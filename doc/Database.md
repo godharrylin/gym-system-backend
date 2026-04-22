@@ -1,23 +1,88 @@
 # Database New
 
-- 人員資料表 `users`
+- 人員資料表 **`users`**
     - 所有角色共用的基本資料。
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
     | `usr_id` | Primary Key | 唯一ID | C00001 |
-    | `usr_active` | bool | 啟用/停用 | • 啟用: 1
+    | `usr_active` | bool | 帳號 啟用/停用 | • 啟用: 1
     • 停用: 0 |
-    | `usr_role_type` | enum | 角色類別(1v1) | • `Instructor`
-    • `Student`
-    • `Staff`
-    • `Admin` |
     | `usr_pwd`  | varChar | 使用者密碼
     唯一，目前都是用手機號碼
     admin →0900000000 |  |
     | `usr_name` | Text | 學生姓名 | 王小明 |
     | `usr_phone` | Text | 聯絡電話 | 0912345678 |
     | `usr_create_dt` | DateTime | 建立時間 | 2025-11-01 |
+- 角色表 **`bmc_role`**
+    - Create Table Code
+        
+        ```sql
+        -- bmc_role
+        CREATE TABLE dbo.bmc_role (
+            bmc_role_id         INT            IDENTITY(1,1) NOT NULL,
+            bmc_role_name       NVARCHAR(50)   NOT NULL,
+            bmc_role_code       VARCHAR(30)    NOT NULL,
+            bmc_role_cdt  DATETIME2(0)   NOT NULL CONSTRAINT DF_bmc_role_create_dt DEFAULT (SYSDATETIME()),
+            bmc_role_upd_dt     DATETIME2(0)   NOT NULL CONSTRAINT DF_bmc_role_upd_dt DEFAULT (SYSDATETIME()),
+            CONSTRAINT PK_bmc_role PRIMARY KEY (bmc_role_id),
+            CONSTRAINT UQ_bmc_role_code UNIQUE (bmc_role_code),
+        );
+        
+        INSERT INTO dbo.bmc_role (bmc_role_name, bmc_role_code)
+        VALUES 
+        (N'員工', 'Staff'),
+        (N'老師', 'Instructor'),
+        (N'學生', 'Student'),
+        (N'管理者', 'Admin');
+        ```
+        
+    
+    | **欄位名稱** | **資料類型** | **說明** | **範例** |
+    | --- | --- | --- | --- |
+    | **`bmc_role_id`** | Primary Key | 唯一ID |  |
+    | **`bmc_role_name`** | nvarChar |   • 員工
+      • 老師
+      • 學生
+      • 管理者 |  |
+    | **`bmc_role_code`** | nvarChar |   • 員工→ `Staff`
+      • 老師→ `Instructor`
+      • 學生→ `Student`
+      • 管理者→ `Admin` |  |
+    | **`bmc_role_cdt`** | DateTime | 建立日期 |  |
+    | **`bmc_role_upd_dt`** | DateTime | 更新日期 |  |
+- 人員角色關聯資料表 `user_role`
+    - 一個人可以有多個角色
+    - **`usr_id`** 、**`bmc_role_id`** 當作複合主鍵
+    - Create Table code
+        
+        ```sql
+        CREATE TABLE dbo.user_role (
+            usr_id               NVARCHAR(50)  NOT NULL,
+            bmc_role_id          INT           NOT NULL,
+            user_role_is_active  NVARCHAR(2)   NOT NULL CONSTRAINT DF_user_role_is_active DEFAULT (1),
+            user_role_cdt        DATETIME2(0)  NOT NULL CONSTRAINT DF_user_role_cdt DEFAULT (SYSDATETIME()),
+            user_role_upd_dt      DATETIME2(0)  NOT NULL CONSTRAINT DF_user_role_upd_dt DEFAULT (SYSDATETIME()),
+            CONSTRAINT PK_user_role PRIMARY KEY (usr_id, bmc_role_id),
+        );
+        
+        INSERT INTO user_role(usr_id, bmc_role_id)
+        VALUES 
+        (N'admin_01', 4),
+        (N'admin_01', 2),
+        (N'U00002', 2),
+        (N'U00003', 2),
+        (N'U00006', 2);
+        ```
+        
+    
+    | **欄位名稱** | **資料類型** | **說明** | **範例** |
+    | --- | --- | --- | --- |
+    | **`usr_id`** | Primary Key | 人員id，必須來自`users.usr_id` |  |
+    | **`bmc_role_id`** | Primary Key | 角色id，必須來自**`bmc_role.bmc_role_id`** |  |
+    | **`user_role_is_active`** | bool | 身分別是否啟用 |  |
+    | **`user_role_cdt`** | DateTime | 建立日期 |  |
+    | **`user_role_upd_dt`** | DateTime | 更新日期 |  |
 - 學生擴展表 `sdt_profile`
     - 目前這張表當作快取中心，放的內容是最近一次進場時間及最新的票券，包含剩餘堂數。
     - 未來可以擴充緊急連絡人等靜態欄位資訊
@@ -413,6 +478,56 @@
     | **`products_update_dt`** | DateTime | 最後更新時間(最後異動庫存時間) |  |
 - 課程定義表 `class`
     - 紀錄課程資訊
+    - Create Table Code
+        
+        ```sql
+         CREATE TABLE dbo.class (
+            -- 課程序號 (主鍵)
+            class_sn            INT             IDENTITY(1,1) NOT NULL,
+            -- 課程名稱
+            class_name          NVARCHAR(100)   NULL,
+            -- 標籤顏色
+            class_label_color   NVARCHAR(20)    NULL,
+            -- 課程時長
+            class_duration      INT             NULL,
+            -- 是否免費 (0: 否, 1: 是)
+            class_is_free       NVARCHAR(2)     NULL CONSTRAINT DF_class_is_free DEFAULT ('N'),
+            -- 授課老師 ID (外鍵)
+            class_instructor_id NVARCHAR(50)    NULL,
+            -- 課程狀態 (0: 下架, 1: 上架)
+            class_is_active     NVARCHAR(2)     NULL CONSTRAINT DF_class_is_active DEFAULT ('Y'),
+            -- 課程分類
+            class_type          NVARCHAR(50)    NULL,
+            -- 建立資訊
+            class_create_pn     NVARCHAR(50)    NULL,
+            class_create_dt     DATETIME        NULL CONSTRAINT DF_class_create_dt DEFAULT (GETDATE()),
+            -- 更新資訊
+            class_up_pn         NVARCHAR(50)    NULL,
+            class_up_dt         DATETIME        NULL CONSTRAINT DF_class_up_dt DEFAULT (GETDATE()),
+            -- 定義主鍵
+            CONSTRAINT PK_class PRIMARY KEY (class_sn),
+        );
+        
+        -- 請確保 dbo.users 表中已經存在這些 usr_id (例如: T001, T002...)
+        INSERT INTO dbo.class (
+            class_name, 
+            class_label_color, 
+            class_duration, 
+            class_is_free, 
+            class_instructor_id, 
+            class_is_active, 
+            class_type, 
+            class_create_pn, 
+            class_up_pn
+        )
+        VALUES 
+        (N'基礎重量訓練', N'#FF5733', 60, 0, N'T001', 1, N'重訓', N'Admin', N'Admin'),
+        (N'極限燃脂拳擊', N'#C70039', 50, 0, N'T002', 1, N'有氧', N'Admin', N'Admin'),
+        (N'舒緩陰瑜珈', N'#DAF7A6', 90, 1, N'T001', 1, N'瑜珈', N'Admin', N'Admin'),
+        (N'核心皮拉提斯', N'#581845', 60, 0, N'T003', 1, N'核心', N'Admin', N'Admin'),
+        (N'進階健體專班', N'#2ECC71', 120, 0, N'T002', 0, N'重訓', N'Admin', N'Admin'); -- 這筆預設為下架狀態
+        ```
+        
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
@@ -422,6 +537,7 @@
     | **`class_duration`** | int | 上課時長(min) |  |
     | **`class_is_free`** | Boolean | 該堂課是否免費 |  |
     | **`class_instructor_id`** | Foreign key | 該課程指導老師，關連到 `users` 表 | 不一定要有這個 |
+    | **`class_instructor_name`** | nvarChar | 該課程老師名字，讓刪除老師資料時，不要因為完全依賴`users`表而報錯 |  |
     | **`class_is_active`** | boolean | 該堂課現在是否開課狀態 |  |
     | **`class_type`** | Enum | 課程種類
     目前沒分類，當作未來擴充 |  |

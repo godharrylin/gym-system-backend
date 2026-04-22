@@ -5,18 +5,18 @@ namespace gym_system.Domain.Entities.Users
     //  角色關聯，支援一人多角色
     public sealed class UserRole
     {
-        private UserRole(string userId, UserRoleCode roleCode, DateTime assignedAt, bool isActived)
+        private UserRole(string userId, UserRoleCode roleCode, DateTime assignedAt, bool isActive)
         {
             UserId = userId;
             RoleCode = roleCode;
             AssignedAt = assignedAt;
-            IsActived = isActived;
+            IsActive = isActive;
         }
 
         public string UserId { get; }
         public UserRoleCode RoleCode { get; }
         public DateTime AssignedAt { get; }
-        public bool IsActived { get; private set; }
+        public bool IsActive { get; private set; }
 
         public static UserRole Assign(string userId, UserRoleCode roleCode, DateTime now, bool isActiveRole)
         {
@@ -26,7 +26,7 @@ namespace gym_system.Domain.Entities.Users
 
         public void Deactivate()
         {
-            IsActived = false;
+            IsActive = false;
         }
     }
 }
