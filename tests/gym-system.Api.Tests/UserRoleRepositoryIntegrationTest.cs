@@ -5,7 +5,6 @@ using gym_system.Infrastructures;
 using gym_system.Infrastructures.Connections;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System.Collections.Generic;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -56,7 +55,26 @@ public sealed class UserRoleRepositoryIntegrationTests
         var getRole = await GetUserRoleAsync_Test(userId, UserRoleCode.Instructor, ct);
         _output.WriteLine($"getRole: ID={getRole?.UserId} ,Role={getRole?.RoleCode}, AssignedAt={getRole?.AssignedAt}");
     }
+    [Fact]
+    public async Task AddRoleAsync_Test_CanAdd()
+    {
+        using var scope = _sp.CreateScope();
+        var roleRepo = scope.ServiceProvider.GetRequiredService<IUserRoleRepository>();
 
+
+        CancellationToken ct = new CancellationToken();
+        var role = UserRole.Assign("U00008", UserRoleCode.Instructor, DateTime.UtcNow, true);
+        var isSuccess = await roleRepo.AddRoleAsync(role, ct);
+    }
+    [Fact]
+    public async Task ReactiveRole_ShouldSuccess()
+    {
+        using var scope = _sp.CreateScope();
+        var roleRepo = scope.ServiceProvider.GetRequiredService<IUserRoleRepository>();
+        CancellationToken ct = new CancellationToken();
+
+        await roleRepo.ReactiveRole("U00006", UserRoleCode.Instructor, ct);
+    }
     private async Task<UserRole?> GetUserRoleAsync_Test(string userId, UserRoleCode roleType, CancellationToken ct)
     {
         //  開啟一個新的DI Scope，模擬一次Http Request的生命週期

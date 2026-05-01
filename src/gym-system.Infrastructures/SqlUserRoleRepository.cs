@@ -42,7 +42,7 @@ namespace gym_system.Infrastructures
             if (row is null) return null;
 
             var code = Enum.Parse<UserRoleCode>(row.bmc_role_code, ignoreCase: true);
-            return UserRole.Assign(row.usr_id, code, row.user_role_cdt, row.user_role_is_active=="Y"? true: false);
+            return UserRole.Assign(row.usr_id, code, row.user_role_cdt, row.user_role_is_active);
         }
         public async Task<bool> AddRoleAsync(UserRole userRole, CancellationToken ct)
         {
@@ -87,10 +87,10 @@ namespace gym_system.Infrastructures
         {
             var sql = """
                     UPDATE dbo.user_role
-                    SET role_is_activce = 'Y'
+                    SET user_role_is_active = 1
                     WHERE 1=1
                     AND usr_id = @usr_id
-                    AND bmc_role_id = @bmc_role_code
+                    AND bmc_role_id = @bmc_role_id
                 """;
 
             var cmd = new CommandDefinition(
@@ -107,7 +107,7 @@ namespace gym_system.Infrastructures
         {
             public string usr_id { get; init; } = string.Empty;
             public string bmc_role_code { get; init; } = string.Empty;
-            public string user_role_is_active { get; init; } = string.Empty;
+            public bool user_role_is_active { get; init; }
             public DateTime user_role_cdt { get; init; }
         }
     }
