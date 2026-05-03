@@ -103,6 +103,27 @@ namespace gym_system.Infrastructures
             var affected = await _session.Connection.ExecuteAsync(cmd);
             return affected > 0;
         }
+
+        public async Task<bool> SetRoleActiveAsync(string userId, UserRoleCode roleType, bool isActive, CancellationToken ct)
+        {
+            var sql = """
+                    UPDATE dbo.user_role
+                    SET user_role_is_active = @isActive
+                    WHERE 1=1
+                    AND usr_id = @usr_id
+                    AND bmc_role_id = @bmc_role_id
+                """;
+
+            var cmd = new CommandDefinition(
+                sql,
+                new { usr_id = userId, bmc_role_id = roleType, isActive },
+                transaction: _session.Transaction,
+                cancellationToken: ct
+            );
+
+            var affected = await _session.Connection.ExecuteAsync(cmd);
+            return affected > 0;
+        }
         private sealed class RoleRow
         {
             public string usr_id { get; init; } = string.Empty;

@@ -224,6 +224,21 @@ namespace gym_system.Application.Tests
                 LastFindPhone = phone;
                 return Task.FromResult(FindUserResult);
             }
+
+            public Task<User?> FindUserByIdAsync(string userId, CancellationToken ct)
+            {
+                return Task.FromResult<User?>(null);
+            }
+
+            public Task<bool> ExistsPhoneForOtherUserAsync(string userId, string phone, CancellationToken ct)
+            {
+                return Task.FromResult(false);
+            }
+
+            public Task<bool> UpdateBasicProfileAsync(string userId, string name, string phone, CancellationToken ct)
+            {
+                return Task.FromResult(false);
+            }
         }
 
         private sealed class FakeUserRoleRepository : IUserRoleRepository
@@ -263,6 +278,11 @@ namespace gym_system.Application.Tests
                 LastReactiveUserId = userId;
                 LastReactiveRoleCode = roleType;
                 return Task.FromResult(ReactiveResult);
+            }
+
+            public Task<bool> SetRoleActiveAsync(string userId, UserRoleCode roleType, bool isActive, CancellationToken ct)
+            {
+                return Task.FromResult(true);
             }
         }
 

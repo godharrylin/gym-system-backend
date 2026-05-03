@@ -57,6 +57,29 @@ namespace gym_system.Infrastructures
             return createdUserId;
         }
 
+        public async Task<User?> FindUserByIdAsync(string userId, CancellationToken ct)
+        {
+            const string sql = """
+                        SELECT
+                            u.usr_id
+                            ,u.usr_name
+                            ,u.usr_phone
+                            ,u.usr_active
+                        FROM dbo.users AS u
+                        WHERE u.usr_id = @userId
+                """;
+            var row = await _session.Connection.QueryFirstOrDefaultAsync<UserRow>(
+                new CommandDefinition(
+                    sql,
+                    new { userId },
+                    transaction: _session.Transaction,
+                    cancellationToken: ct)
+            );
+
+            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_phone)
+                : null;
+        }
+
         public async Task<User?> FindUserByPhone(string phone, CancellationToken ct)
         {
             var searchPhone = phone;
@@ -79,6 +102,46 @@ namespace gym_system.Infrastructures
 
             return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_phone)
                 : null;
+        }
+
+        public async Task<bool> ExistsPhoneForOtherUserAsync(string userId, string phone, CancellationToken ct)
+        {
+            const string sql = """
+                        SELECT COUNT(1)
+                        FROM dbo.users AS u
+                        WHERE u.usr_phone = @phone
+                          AND u.usr_id <> @userId
+                """;
+
+            var count = await _session.Connection.QuerySingleAsync<int>(
+                new CommandDefinition(
+                    sql,
+                    new { userId, phone },
+                    transaction: _session.Transaction,
+                    cancellationToken: ct)
+            );
+
+            return count > 0;
+        }
+
+        public async Task<bool> UpdateBasicProfileAsync(string userId, string name, string phone, CancellationToken ct)
+        {
+            const string sql = """
+                        UPDATE dbo.users
+                        SET usr_name = @name,
+                            usr_phone = @phone
+                        WHERE usr_id = @userId
+                """;
+
+            var affected = await _session.Connection.ExecuteAsync(
+                new CommandDefinition(
+                    sql,
+                    new { userId, name, phone },
+                    transaction: _session.Transaction,
+                    cancellationToken: ct)
+            );
+
+            return affected > 0;
         }
 
         private sealed class UserRow
