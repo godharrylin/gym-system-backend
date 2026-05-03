@@ -10,9 +10,8 @@ namespace gym_system.Domain.Repositories
         /// <param name="phones">手機號碼</param>
         /// <param name="ct"></param>
         /// <returns></returns>
-        Task<bool> AnyPhoneExistsAsync(IReadOnlyList<string> phones, CancellationToken ct);
-        Task<bool> AddRangeAsync(IReadOnlyList<User> members, CancellationToken ct);
-        Task<List<string>> GenerateIdsAsync(int count, CancellationToken ct);
+        Task<IReadOnlyList<string>> GetExistingPhonesAsync(IReadOnlyList<string> phones, CancellationToken ct);
+        Task<string> AddAsync(User user, CancellationToken ct);
         Task<User?> FindUserByPhone(string phone, CancellationToken ct);
     }
 }

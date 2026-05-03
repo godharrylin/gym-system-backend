@@ -32,21 +32,23 @@ namespace gym_system.Application.InstructorUseCase.Command.CreateInstructor
             try
             {
                 var user = await _userRepository.FindUserByPhone(phone, ct);
+                string userId;
                 //  如果輸入的電話號碼還沒被註冊，先註冊user
                 if (user == null)
                 {
-                    var id = await _userRepository.GenerateIdsAsync(1, ct);
-                    user = User.Create(id[0], command.Name.Trim(), phone, phone);
+                    user = User.Register(command.Name.Trim(), phone, phone);
                     //  建立 User
-                    var status = await _userRepository.AddRangeAsync(new[] { user }, ct);
+                    userId = await _userRepository.AddAsync(user, ct);
 
-                    if (status == false)
+                    if (string.IsNullOrWhiteSpace(userId))
                     {
                         throw new InvalidOperationException("[CreateInstructor Handle]: User Create Fail");
                     }
                 }
-
-                var userId = user.Id;
+                else
+                {
+                    userId = user.Id;
+                }
 
                 var role = await _roleRepository.GetUserRoleAsync(userId, UserRoleCode.Instructor, ct);
                 var result = false;

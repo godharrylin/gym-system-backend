@@ -21,7 +21,8 @@ namespace gym_system.Domain.Entities.Users
         public string PasswordHash { get; private set; }
         public bool IsActived { get; private set; }
 
-        public static User Create(string id, string name, string phone, string passwordHash)
+        //  回填
+        public static User Rehydrate(string id, string name, string phone, string passwordHash)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new InvalidOperationException("User Id 必填");
             if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("姓名必填");
@@ -29,6 +30,15 @@ namespace gym_system.Domain.Entities.Users
             if (string.IsNullOrWhiteSpace(passwordHash)) throw new InvalidOperationException("密碼必填");
 
             return new User(id, name.Trim(), phone.Trim(), passwordHash.Trim());
+        }
+
+        public static User Register(string name, string phone, string passwordHash)
+        {
+            if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("姓名必填");
+            if (string.IsNullOrWhiteSpace(phone)) throw new InvalidOperationException("手機必填");
+            if (string.IsNullOrWhiteSpace(passwordHash)) throw new InvalidOperationException("密碼必填");
+
+            return new User(string.Empty, name.Trim(), phone.Trim(), passwordHash.Trim());
         }
 
         public void DeActive()

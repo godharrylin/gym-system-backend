@@ -11,15 +11,17 @@ namespace gym_system.Application.Service
             _userRepo = userRepo;
         }
 
-        public async Task EnsurePhoneisNotExistAsync(string phone, CancellationToken ct)
+        public async Task EnsurePhoneIsNotExistAsync(string phone, CancellationToken ct)
         {
-            if(await _userRepo.AnyPhoneExistsAsync(new[] { phone }, ct))
+            var existPhone = await _userRepo.GetExistingPhonesAsync(new[] { phone }, ct);
+            if (existPhone is not null && existPhone.Any())
                 throw new InvalidOperationException("Phone already exists");
         }
 
         public async Task EnsurePhoneAreNotExistAsync(IReadOnlyList<string> phones, CancellationToken ct)
         {
-            if (await _userRepo.AnyPhoneExistsAsync(phones, ct))
+            var existPhones = await _userRepo.GetExistingPhonesAsync(phones, ct);
+            if (existPhones is not null && existPhones.Any())
                 throw new InvalidOperationException("Phone already exists");
         }
     }

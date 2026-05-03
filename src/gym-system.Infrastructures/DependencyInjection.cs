@@ -47,6 +47,7 @@ namespace gym_system.Infrastructures
         {
             services.AddScoped<IUnitOfWork, NoopUnitOfWork>();
             services.AddScoped<IClock, SystemClock>();
+            services.AddScoped<IUserRepository, SqlUserRepository>();
             services.AddScoped<IUserRoleRepository, SqlUserRoleRepository>();
             services.AddScoped<ISqlSession, SqlSession>();
             DapperConfig.Register();
