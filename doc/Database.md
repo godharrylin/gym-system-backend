@@ -1,11 +1,45 @@
 # Database New
 
 - 人員資料表 **`users`**
+    - Create Table Code
+        
+        ```sql
+        CREATE TABLE [users] (
+            -- 1. 建立自增數字，這才是真正的 Primary Key
+            [usr_no] INT IDENTITY(1,1) NOT NULL, 
+            
+            -- 2. 建立計算欄位 (Computed Column)
+            -- PERSISTED 表示資料會實體儲存在硬碟，這樣才能建立索引並提高查詢速度
+            [usr_id] AS ('U' + RIGHT(REPLICATE('0', 10) + CAST([usr_no] AS VARCHAR(10)), 10)) PERSISTED,
+            
+            [usr_name] NVARCHAR(50) NOT NULL,
+            [usr_phone] VARCHAR(20) NOT NULL,
+            [usr_active] BIT DEFAULT 1,
+            [usr_create_dt] DATETIME DEFAULT GETDATE(),
+        
+            -- 設定 PK 與唯一約束
+            CONSTRAINT [PK_Users] PRIMARY KEY ([usr_no]),
+            CONSTRAINT [UQ_User_Id] UNIQUE ([usr_id])
+        );
+        
+        INSERT INTO [Users] ([usr_name], [usr_phone], [usr_active])
+        VALUES
+        (N'管理員1', '0900000000', 1),
+        (N'老師小美', '0911111111', 1),
+        (N'老師3',   '0922222222', 1),
+        (N'學生小靖', '0933333333', 1),
+        (N'學生喵喵', '0944444444', 1),
+        (N'老師1',   '0912345678', 1),
+        (N'老師2',   '0922111222', 1);
+        ```
+        
     - 所有角色共用的基本資料。
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
-    | `usr_id` | Primary Key | 唯一ID | C00001 |
+    | `usr_no` | Primary Key | 系統使用，數字 |  |
+    | `usr_id` | nvarChar | 唯一ID，前端顯示用，依照usr_no
+    產生 |  |
     | `usr_active` | bool | 帳號 啟用/停用 | • 啟用: 1
     • 停用: 0 |
     | `usr_pwd`  | varChar | 使用者密碼
@@ -60,19 +94,22 @@
         CREATE TABLE dbo.user_role (
             usr_id               NVARCHAR(50)  NOT NULL,
             bmc_role_id          INT           NOT NULL,
-            user_role_is_active  NVARCHAR(2)   NOT NULL CONSTRAINT DF_user_role_is_active DEFAULT (1),
+            user_role_is_active  BIT   NOT NULL CONSTRAINT DF_user_role_is_active DEFAULT (1),
             user_role_cdt        DATETIME2(0)  NOT NULL CONSTRAINT DF_user_role_cdt DEFAULT (SYSDATETIME()),
             user_role_upd_dt      DATETIME2(0)  NOT NULL CONSTRAINT DF_user_role_upd_dt DEFAULT (SYSDATETIME()),
-            CONSTRAINT PK_user_role PRIMARY KEY (usr_id, bmc_role_id),
+            CONSTRAINT PK_user_role PRIMARY KEY (usr_id, bmc_role_id)
         );
         
         INSERT INTO user_role(usr_id, bmc_role_id)
         VALUES 
-        (N'admin_01', 4),
-        (N'admin_01', 2),
+        (N'U00001', 4),
+        (N'U00001', 2),
         (N'U00002', 2),
         (N'U00003', 2),
         (N'U00006', 2);
+        
+        CREATE UNIQUE INDEX UX_user_roles_user_role
+        ON dbo.user_role (usr_id, bmc_role_id);
         ```
         
     
