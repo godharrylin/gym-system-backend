@@ -117,6 +117,44 @@ namespace gym_system.Application.Tests
             Assert.Equal(0, sut.UnitOfWork.CommitCount);
         }
 
+        [Fact]
+        public async Task Handle_ShouldUpdateOnlyNameAndPhone_WhenIsEmployedIsNull()
+        {
+            var sut = CreateSut();
+            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw");
+
+            var command = new UpdateInstructorCommand
+            {
+                UserId = "U0000000001",
+                Name = "New Name",
+                Phone = "0912999888",
+                IsEmployed = null
+            };
+
+            var result = await sut.Handler.Handle(command, CancellationToken.None);
+
+            Assert.True(result);
+            Assert.Equal(0, sut.RoleRepository.SetRoleActiveCallCount);
+            Assert.Equal(1, sut.UnitOfWork.CommitCount);
+            Assert.Equal(0, sut.UnitOfWork.RollbackCount);
+        }
+
+        [Fact]
+        public async Task Handle_ShouldThrow_WhenNameIsWhitespace()
+        {
+            var sut = CreateSut();
+            var command = new UpdateInstructorCommand
+            {
+                UserId = "U0000000001",
+                Name = "   ",
+                Phone = null,
+                IsEmployed = null
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command, CancellationToken.None));
+            Assert.Equal(0, sut.UnitOfWork.BeginCount);
+        }
+
         private static SutBundle CreateSut()
         {
             var userRepository = new FakeUserRepository();

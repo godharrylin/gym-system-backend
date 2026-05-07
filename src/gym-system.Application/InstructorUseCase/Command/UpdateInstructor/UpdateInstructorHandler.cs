@@ -22,12 +22,14 @@ namespace gym_system.Application.InstructorUseCase.Command.UpdateInstructor
         public async Task<bool> Handle(UpdateInstructorCommand command, CancellationToken ct)
         {
             var userId = command.UserId.Trim();
-            var name = command.Name.Trim();
-            var phone = command.Phone.Trim();
 
             if (string.IsNullOrWhiteSpace(userId)) throw new InvalidOperationException("老師 ID 必填");
-            if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("老師姓名必填");
-            if (string.IsNullOrWhiteSpace(phone)) throw new InvalidOperationException("老師電話必填");
+            if (command.Name is not null && string.IsNullOrWhiteSpace(command.Name)) throw new InvalidOperationException("老師姓名不可為空白");
+            if (command.Phone is not null && string.IsNullOrWhiteSpace(command.Phone)) throw new InvalidOperationException("老師電話不可為空白");
+            if (command.Name is null && command.Phone is null && command.IsEmployed is null)
+            {
+                throw new InvalidOperationException("至少提供一個可更新欄位");
+            }
 
             await _unitOfWork.BeginAsync(ct);
             try
@@ -38,13 +40,19 @@ namespace gym_system.Application.InstructorUseCase.Command.UpdateInstructor
                     throw new InvalidOperationException("老師不存在");
                 }
 
-                var existsPhoneInOtherUser = await _userRepository.ExistsPhoneForOtherUserAsync(userId, phone, ct);
-                if (existsPhoneInOtherUser)
+                var nextName = command.Name is null ? user.Name : command.Name.Trim();
+                var nextPhone = command.Phone is null ? user.Phone : command.Phone.Trim();
+
+                if (command.Phone is not null)
                 {
-                    throw new InvalidOperationException("手機號碼已被其他使用者註冊");
+                    var existsPhoneInOtherUser = await _userRepository.ExistsPhoneForOtherUserAsync(userId, nextPhone, ct);
+                    if (existsPhoneInOtherUser)
+                    {
+                        throw new InvalidOperationException("手機號碼已被其他使用者註冊");
+                    }
                 }
 
-                var updatedProfile = await _userRepository.UpdateBasicProfileAsync(userId, name, phone, ct);
+                var updatedProfile = await _userRepository.UpdateBasicProfileAsync(userId, nextName, nextPhone, ct);
                 if (!updatedProfile)
                 {
                     throw new InvalidOperationException("老師資料更新失敗");
@@ -56,9 +64,13 @@ namespace gym_system.Application.InstructorUseCase.Command.UpdateInstructor
                     throw new InvalidOperationException("找不到老師角色");
                 }
 
-                var updatedRole = await _roleRepository.SetRoleActiveAsync(userId, UserRoleCode.Instructor, command.IsEmployed, ct);
+                var updatedRole = true;
+                if (command.IsEmployed.HasValue)
+                {
+                    updatedRole = await _roleRepository.SetRoleActiveAsync(userId, UserRoleCode.Instructor, command.IsEmployed.Value, ct);
+                }
 
-                if (updatedRole)
+                if (updatedProfile && updatedRole)
                 {
                     await _unitOfWork.CommitAsync(ct);
                 }
@@ -67,7 +79,7 @@ namespace gym_system.Application.InstructorUseCase.Command.UpdateInstructor
                     await _unitOfWork.RollbackAsync(ct);
                 }
 
-                return updatedRole;
+                return updatedProfile && updatedRole;
             }
             catch
             {

@@ -126,17 +126,37 @@ namespace gym_system.Infrastructures
 
         public async Task<bool> UpdateBasicProfileAsync(string userId, string name, string phone, CancellationToken ct)
         {
-            const string sql = """
-                        UPDATE dbo.users
-                        SET usr_name = @name,
-                            usr_phone = @phone
-                        WHERE usr_id = @userId
-                """;
+            var updates = new List<string>();
+            var parameters = new DynamicParameters();
+
+            parameters.Add("userId", userId);
+
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                updates.Add("usr_name = @name");
+                parameters.Add("name", name);
+            }
+
+            if (!string.IsNullOrWhiteSpace(phone))
+            {
+                updates.Add("usr_phone = @phone");
+                parameters.Add("phone", phone);
+            }
+
+            // 沒有任何欄位要更新
+            if (updates.Count == 0)
+                return false;
+
+            var sql = $@"
+                    UPDATE dbo.users
+                    SET {string.Join(", ", updates)}
+                    WHERE usr_id = @userId
+                ";
 
             var affected = await _session.Connection.ExecuteAsync(
                 new CommandDefinition(
                     sql,
-                    new { userId, name, phone },
+                    parameters,
                     transaction: _session.Transaction,
                     cancellationToken: ct)
             );
