@@ -1,3 +1,4 @@
+using gym_system.Application.InstructorUseCase.Queries;
 using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
@@ -5,6 +6,7 @@ using gym_system.Domain.Entities.Tickets;
 using gym_system.Domain.Repositories;
 using gym_system.Infrastructures.Connections;
 using gym_system.Infrastructures.Dapper;
+using gym_system.Infrastructures.Queries.Instructors;
 using gym_system.Infrastructures.Queries.TicketPlans;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -47,6 +49,10 @@ namespace gym_system.Infrastructures
         {
             services.AddScoped<IUnitOfWork, NoopUnitOfWork>();
             services.AddScoped<IClock, SystemClock>();
+            services.AddScoped<IUserRepository, SqlUserRepository>();
+            services.AddScoped<IUserRoleRepository, SqlUserRoleRepository>();
+            services.AddScoped<IInstructorQueryService, DapperGetInstructorsQueryService>();
+            services.AddScoped<ISqlSession, SqlSession>();
             DapperConfig.Register();
             return services;
         }

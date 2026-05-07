@@ -18,7 +18,7 @@ namespace gym_system.Application.Tests
                         Name = "Single",
                         Price = 250,
                         Days = 1,
-                        Sessions = "1",
+                        Sessions = 1,
                         Type = "SESSION",
                         Tags = [],
                         Description = "任何人皆可購買"

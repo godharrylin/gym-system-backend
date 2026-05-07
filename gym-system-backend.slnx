@@ -1,7 +1,7 @@
 <Solution>
   <Folder Name="/tests/">
-    <Project Path="tests/gym-system.Application.Tests/gym-system.Application.Tests.csproj" />
     <Project Path="tests/gym-system.Api.Tests/gym-system.Api.Tests.csproj" />
+    <Project Path="tests/gym-system.Application.Tests/gym-system.Application.Tests.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/gym-system.Api/gym-system.Api.csproj" />
