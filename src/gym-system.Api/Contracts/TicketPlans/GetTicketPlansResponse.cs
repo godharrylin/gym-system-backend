@@ -12,7 +12,7 @@
         /// <summary>
         /// 票券單價
         /// </summary>
-        public required string Price { get; set; } //  免費會顯示 Free，而不是 $0
+        public required string Price { get; set; } 
         /// <summary>
         /// 到期天數
         /// </summary>

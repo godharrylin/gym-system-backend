@@ -1,6 +1,8 @@
 using gym_system.Api.Contracts.Instructors;
+using gym_system.Api.Contracts.TicketPlans;
 using gym_system.Application.InstructorUseCase.Command.CreateInstructor;
 using gym_system.Application.InstructorUseCase.Command.UpdateInstructor;
+using gym_system.Application.InstructorUseCase.Queries;
 using Microsoft.AspNetCore.Mvc;
 
 namespace gym_system.Api.Controllers
@@ -9,15 +11,41 @@ namespace gym_system.Api.Controllers
     [Route("api/v1/instructors")]
     public class InstructorController : ControllerBase
     {
+        private readonly GetInstructorsListHandler _getInstructorsListHandler;
         private readonly CreateInstructorHandler _createInstructorHandler;
         private readonly UpdateInstructorHandler _updateInstructorHandler;
 
         public InstructorController(
+            GetInstructorsListHandler getInstructorsListHandler,
             CreateInstructorHandler createInstructorHandler,
             UpdateInstructorHandler updateInstructorHandler)
         {
+            _getInstructorsListHandler = getInstructorsListHandler;
             _createInstructorHandler = createInstructorHandler;
             _updateInstructorHandler = updateInstructorHandler;
+        }
+
+        /// <summary>
+        /// 取得老師們列表資訊
+        /// </summary>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> GetInstructorsAsync(CancellationToken ct)
+        {
+            var result = await _getInstructorsListHandler.Handle(ct);
+
+            var response = new GetInstructorsResponse
+            {
+                InstructorList = result.Select(x => new InstructorDto
+                {
+                    Id = x.usr_id,
+                    Name = x.usr_name,
+                    Phone = x.usr_phone,
+                    isActived = x.user_role_is_active
+                }).ToList()
+            };
+            return Ok(response);
         }
 
         /// <summary>

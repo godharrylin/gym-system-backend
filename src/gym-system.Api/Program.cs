@@ -1,5 +1,6 @@
 using gym_system.Application.InstructorUseCase.Command.CreateInstructor;
 using gym_system.Application.InstructorUseCase.Command.UpdateInstructor;
+using gym_system.Application.InstructorUseCase.Queries;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
 using gym_system.Infrastructures;
 
@@ -12,6 +13,7 @@ builder.Services.AddControllers();
 builder.Services.AddInfrastructureSql();
 builder.Services.AddScoped<CreateInstructorHandler>();
 builder.Services.AddScoped<UpdateInstructorHandler>();
+builder.Services.AddScoped<GetInstructorsListHandler>();
 /* Mock Connection */
 //builder.Services.AddScoped<RegisterMemberHandler>();
 //builder.Services.AddInfrastructureInMemory();
