@@ -20,13 +20,13 @@ namespace gym_system.Infrastructures.Queries.Classes
             sql.Append("""
                 SELECT
                     c.class_sn,
-                    COALESCE(c.class_name, ''),
-                    COALESCE(u.usr_name, ''),
-                    COALESCE(c.class_label_color, ''),
-                    COALESCE(c.class_duration, 0),
+                    c.class_name,
+                    u.usr_name,
+                    c.class_label_color,
+                    c.class_duration,
                     c.class_is_free,
                     c.class_is_active,
-                    COALESCE(c.class_type, '')
+                    c.class_type
                 FROM dbo.[class] c
                 LEFT JOIN dbo.users u
                     ON u.usr_id = c.class_instructor_id
