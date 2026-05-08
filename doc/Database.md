@@ -14,6 +14,7 @@
             
             [usr_name] NVARCHAR(50) NOT NULL,
             [usr_phone] VARCHAR(20) NOT NULL,
+            // 1:啟用, 0:不啟用
             [usr_active] BIT DEFAULT 1,
             [usr_create_dt] DATETIME DEFAULT GETDATE(),
         
@@ -85,7 +86,7 @@
       • 管理者→ `Admin` |  |
     | **`bmc_role_cdt`** | DateTime | 建立日期 |  |
     | **`bmc_role_upd_dt`** | DateTime | 更新日期 |  |
-- 人員角色關聯資料表 `user_role`
+- 人員角色關聯資料表 **`user_role`**
     - 一個人可以有多個角色
     - **`usr_id`** 、**`bmc_role_id`** 當作複合主鍵
     - Create Table code
@@ -94,6 +95,7 @@
         CREATE TABLE dbo.user_role (
             usr_id               NVARCHAR(50)  NOT NULL,
             bmc_role_id          INT           NOT NULL,
+            // 1:啟用, 0:不啟用
             user_role_is_active  BIT   NOT NULL CONSTRAINT DF_user_role_is_active DEFAULT (1),
             user_role_cdt        DATETIME2(0)  NOT NULL CONSTRAINT DF_user_role_cdt DEFAULT (SYSDATETIME()),
             user_role_upd_dt      DATETIME2(0)  NOT NULL CONSTRAINT DF_user_role_upd_dt DEFAULT (SYSDATETIME()),
@@ -120,7 +122,7 @@
     | **`user_role_is_active`** | bool | 身分別是否啟用 |  |
     | **`user_role_cdt`** | DateTime | 建立日期 |  |
     | **`user_role_upd_dt`** | DateTime | 更新日期 |  |
-- 學生擴展表 `sdt_profile`
+- 學生擴展表 **`sdt_profile`**
     - 目前這張表當作快取中心，放的內容是最近一次進場時間及最新的票券，包含剩餘堂數。
     - 未來可以擴充緊急連絡人等靜態欄位資訊
     - 該表更新時機
@@ -140,7 +142,7 @@
     | `sdt_cur_ticket_remain_count` | int(nullable) | 最新一筆票券的剩餘堂數(堂票才會有) |  |
     | `sdt_cur_ticket_expire_dt` | DateTime | 最新一筆票券的到期日 |  |
     | `sdt_cur_ticket_up_dt` | DateTime | 更新時間戳 |  |
-- 學生票券資料表 `sdt_ticket_pass`
+- 學生票券資料表 **`sdt_ticket_pass`**
     - 學生持有的票券資訊，包括、到期日、使用次數、付款狀態，等使用權利
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
@@ -183,7 +185,7 @@
     | **`sdt_att_record_upd_by_staff`** | varChar | 如果是員工補登，此欄位會顯示員工的id |
     | **`sdt_att_record_upd_date`** | DateTime | 資料異動時間 |
     
-- 票券核銷表 `sdt_ticket_usage_log`
+- 票券核銷表 **`sdt_ticket_usage_log`**
     - 學生票券的使用紀錄，Insert only
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
@@ -513,7 +515,7 @@
     | **`products_is_active`** | boolean | 是否上架 |  |
     | **`products_create_dt`** | DateTime | 商品建立日 |  |
     | **`products_update_dt`** | DateTime | 最後更新時間(最後異動庫存時間) |  |
-- 課程定義表 `class`
+- 課程定義表 **`class`**
     - 紀錄課程資訊
     - Create Table Code
         
@@ -528,11 +530,11 @@
             -- 課程時長
             class_duration      INT             NULL,
             -- 是否免費 (0: 否, 1: 是)
-            class_is_free       NVARCHAR(2)     NULL CONSTRAINT DF_class_is_free DEFAULT ('N'),
+            class_is_free       BIT          NOT NULL CONSTRAINT DF_class_is_free DEFAULT(0),
             -- 授課老師 ID (外鍵)
             class_instructor_id NVARCHAR(50)    NULL,
             -- 課程狀態 (0: 下架, 1: 上架)
-            class_is_active     NVARCHAR(2)     NULL CONSTRAINT DF_class_is_active DEFAULT ('Y'),
+            class_is_active     BIT          NOT NULL CONSTRAINT DF_class_is_active DEFAULT (1),
             -- 課程分類
             class_type          NVARCHAR(50)    NULL,
             -- 建立資訊

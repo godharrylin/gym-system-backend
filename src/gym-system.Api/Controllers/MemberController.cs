@@ -1,5 +1,6 @@
 using gym_system.Api.Contracts;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
+using gym_system.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace gym_system.Api.Controllers
@@ -40,15 +41,15 @@ namespace gym_system.Api.Controllers
             return Ok(result);
         }
 
-        private static RegisterPaymentStatus ParsePaymentState(string status)
+        private static PaymentState ParsePaymentState(string status)
         {
             if (status.Equals("PAID", StringComparison.OrdinalIgnoreCase) ||
                 status.Equals("Paid", StringComparison.OrdinalIgnoreCase))
             {
-                return RegisterPaymentStatus.Paid;
+                return PaymentState.Paid;
             }
 
-            return RegisterPaymentStatus.UnPaid;
+            return PaymentState.UnPaid;
         }
     }
 }
