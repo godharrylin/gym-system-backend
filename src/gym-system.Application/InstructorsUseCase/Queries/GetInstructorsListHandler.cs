@@ -1,5 +1,5 @@
-﻿
-namespace gym_system.Application.InstructorUseCase.Queries
+
+namespace gym_system.Application.InstructorsUseCase.Queries
 {
     public class GetInstructorsListHandler
     {
@@ -9,7 +9,7 @@ namespace gym_system.Application.InstructorUseCase.Queries
             _queryService = queryService;
         }
 
-        public async Task<IReadOnlyList<InstrucotrResult>> Handle(CancellationToken ct)
+        public async Task<IReadOnlyList<InstructorResult>> Handle(CancellationToken ct)
         => await _queryService.GetInstructorsAsync(ct);
 
     }

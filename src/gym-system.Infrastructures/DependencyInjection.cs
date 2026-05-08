@@ -1,4 +1,4 @@
-using gym_system.Application.InstructorUseCase.Queries;
+using gym_system.Application.InstructorsUseCase.Queries;
 using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
@@ -28,7 +28,7 @@ namespace gym_system.Infrastructures
             services.AddScoped<ITicketPassRepository, InMemoryTicketPassRepository>();
             
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
-            services.AddScoped<ITicketPlanCatalogQuerySerivce, DapperTicketPlanCatalogQueryService>();
+            services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
 
             return services;
         }
@@ -39,7 +39,7 @@ namespace gym_system.Infrastructures
             services.AddCommonInfrastructure();
 
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
-            services.AddScoped<ITicketPlanCatalogQuerySerivce, DapperTicketPlanCatalogQueryService>();
+            services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
 
             return services;
         }

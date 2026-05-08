@@ -6,11 +6,11 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
 {
     public sealed class GetActiveTicketPlansHandler
     {
-        private readonly ITicketPlanCatalogQuerySerivce _queryService;
+        private readonly ITicketPlanCatalogQueryService _queryService;
 
-        public GetActiveTicketPlansHandler(ITicketPlanCatalogQuerySerivce querySerivce)
+        public GetActiveTicketPlansHandler(ITicketPlanCatalogQueryService queryService)
         {
-            _queryService= querySerivce;
+            _queryService= queryService;
         }
 
         public Task<IReadOnlyList<TicketPlanResult>> Handle(CancellationToken ct = default)

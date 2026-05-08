@@ -1,6 +1,6 @@
 using gym_system.Api.Contracts.Instructors;
 using gym_system.Api.Controllers;
-using gym_system.Application.InstructorUseCase.Queries;
+using gym_system.Application.InstructorsUseCase.Queries;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
 
@@ -15,7 +15,7 @@ namespace gym_system.Api.Tests
             {
                 Result =
                 [
-                    new InstrucotrResult
+                    new InstructorResult
                     {
                         usr_id = "U0000000001",
                         usr_name = "Amy",
@@ -60,9 +60,9 @@ namespace gym_system.Api.Tests
 
         private sealed class FakeInstructorQueryService : IInstructorQueryService
         {
-            public IReadOnlyList<InstrucotrResult> Result { get; set; } = [];
+            public IReadOnlyList<InstructorResult> Result { get; set; } = [];
 
-            public Task<IReadOnlyList<InstrucotrResult>> GetInstructorsAsync(CancellationToken ct)
+            public Task<IReadOnlyList<InstructorResult>> GetInstructorsAsync(CancellationToken ct)
             {
                 return Task.FromResult(Result);
             }

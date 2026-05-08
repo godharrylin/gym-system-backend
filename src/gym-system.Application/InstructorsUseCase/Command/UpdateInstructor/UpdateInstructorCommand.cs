@@ -1,4 +1,4 @@
-namespace gym_system.Application.InstructorUseCase.Command.UpdateInstructor
+namespace gym_system.Application.InstructorsUseCase.Command.UpdateInstructor
 {
     public sealed class UpdateInstructorCommand
     {

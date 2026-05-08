@@ -8,7 +8,7 @@ namespace gym_system.Application.Tests
         [Fact]
         public async Task ShouldReturnPlans_FromQueryService()
         {
-            var fake = new FakeTicketPlanCatalogQuerySerivce
+            var fake = new FakeTicketPlanCatalogQueryService
             {
                 Result =
                 [
@@ -37,7 +37,7 @@ namespace gym_system.Application.Tests
         [Fact]
         public async Task Handle_ShouldReturnEmpty_WhenNoPlans()
         {
-            var fake = new FakeTicketPlanCatalogQuerySerivce { Result = [] };
+            var fake = new FakeTicketPlanCatalogQueryService { Result = [] };
             var sut = new GetActiveTicketPlansHandler(fake);
 
             var actual = await sut.Handle();
@@ -48,7 +48,7 @@ namespace gym_system.Application.Tests
         [Fact]
         public async Task Handle_ShouldPassCancellationToken_ToQueryService()
         {
-            var fake = new FakeTicketPlanCatalogQuerySerivce { Result = [] };
+            var fake = new FakeTicketPlanCatalogQueryService { Result = [] };
             var sut = new GetActiveTicketPlansHandler(fake);
             using var cts = new CancellationTokenSource();
 
@@ -60,7 +60,7 @@ namespace gym_system.Application.Tests
         [Fact]
         public async Task Handle_ShouldThrow_WhenQueryServiceThrows()
         {
-            var fake = new FakeTicketPlanCatalogQuerySerivce
+            var fake = new FakeTicketPlanCatalogQueryService
             {
                 ExceptionToThrow = new InvalidOperationException("query failed")
             };
@@ -68,7 +68,7 @@ namespace gym_system.Application.Tests
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handle());
         }
-        private sealed class FakeTicketPlanCatalogQuerySerivce: ITicketPlanCatalogQuerySerivce
+        private sealed class FakeTicketPlanCatalogQueryService: ITicketPlanCatalogQueryService
         {
             public IReadOnlyList<TicketPlanResult> Result { get; set; } = [];
             public Exception? ExceptionToThrow { get; set; }

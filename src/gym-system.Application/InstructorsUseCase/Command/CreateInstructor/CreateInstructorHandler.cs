@@ -2,7 +2,7 @@
 using gym_system.Domain.Repositories;
 using gym_system.Domain.Enums;
 
-namespace gym_system.Application.InstructorUseCase.Command.CreateInstructor
+namespace gym_system.Application.InstructorsUseCase.Command.CreateInstructor
 {
     public sealed class CreateInstructorHandler
     {

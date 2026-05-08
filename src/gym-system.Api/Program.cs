@@ -1,6 +1,6 @@
-using gym_system.Application.InstructorUseCase.Command.CreateInstructor;
-using gym_system.Application.InstructorUseCase.Command.UpdateInstructor;
-using gym_system.Application.InstructorUseCase.Queries;
+using gym_system.Application.InstructorsUseCase.Command.CreateInstructor;
+using gym_system.Application.InstructorsUseCase.Command.UpdateInstructor;
+using gym_system.Application.InstructorsUseCase.Queries;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
 using gym_system.Infrastructures;
 
@@ -36,3 +36,4 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+

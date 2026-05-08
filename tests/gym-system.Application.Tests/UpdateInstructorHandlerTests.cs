@@ -1,4 +1,4 @@
-using gym_system.Application.InstructorUseCase.Command.UpdateInstructor;
+using gym_system.Application.InstructorsUseCase.Command.UpdateInstructor;
 using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Enums;
 using gym_system.Domain.Repositories;
