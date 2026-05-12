@@ -1,5 +1,5 @@
 using gym_system.Application.InstructorsUseCase.Queries;
-using gym_system.Application.ClassesUseCase.Queries;
+using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
@@ -8,7 +8,7 @@ using gym_system.Domain.Repositories;
 using gym_system.Infrastructures.Connections;
 using gym_system.Infrastructures.Dapper;
 using gym_system.Infrastructures.Queries.Instructors;
-using gym_system.Infrastructures.Queries.Classes;
+using gym_system.Infrastructures.Queries.Courses;
 using gym_system.Infrastructures.Queries.TicketPlans;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,7 +31,7 @@ namespace gym_system.Infrastructures
             
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
             services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
-            services.AddScoped<IClassCatalogQueryService, DapperClassCatalogQueryService>();
+            services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
 
             return services;
         }
@@ -43,7 +43,7 @@ namespace gym_system.Infrastructures
 
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
             services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
-            services.AddScoped<IClassCatalogQueryService, DapperClassCatalogQueryService>();
+            services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
 
             return services;
         }
@@ -58,6 +58,8 @@ namespace gym_system.Infrastructures
             services.AddScoped<IInstructorQueryService, DapperGetInstructorsQueryService>();
             services.AddScoped<ISqlSession, SqlSession>();
             DapperConfig.Register();
+            services.AddScoped<ICourseRepository, SqlCourseRepository>();
+            services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
             return services;
         }
     }

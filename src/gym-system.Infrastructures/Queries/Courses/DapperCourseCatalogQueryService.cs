@@ -1,20 +1,20 @@
 using Dapper;
-using gym_system.Application.ClassesUseCase.Queries;
+using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Infrastructures.Connections;
 using System.Text;
 
-namespace gym_system.Infrastructures.Queries.Classes
+namespace gym_system.Infrastructures.Queries.Courses
 {
-    internal sealed class DapperClassCatalogQueryService : IClassCatalogQueryService
+    internal sealed class DapperCourseCatalogQueryService : ICourseCatalogQueryService
     {
         private readonly ISqlConnectionFactory _connectionFactory;
 
-        public DapperClassCatalogQueryService(ISqlConnectionFactory connectionFactory)
+        public DapperCourseCatalogQueryService(ISqlConnectionFactory connectionFactory)
         {
             _connectionFactory = connectionFactory;
         }
 
-        public async Task<IReadOnlyList<ClassResult>> GetClassesAsync(bool? isActive, CancellationToken ct)
+        public async Task<IReadOnlyList<CourseResult>> GetClassesAsync(bool? isActive, CancellationToken ct)
         {
             var sql = new StringBuilder();
             sql.Append("""
@@ -49,7 +49,7 @@ namespace gym_system.Infrastructures.Queries.Classes
                 param,
                 cancellationToken: ct
             );
-            var rows = await conn.QueryAsync<ClassResult>(cmd);
+            var rows = await conn.QueryAsync<CourseResult>(cmd);
 
             return rows.AsList();
         }

@@ -15,7 +15,7 @@ namespace gym_system.Api.Tests
             {
                 Result =
                 [
-                    new ClassResult
+                    new CourseResult
                     {
                         class_sn = 1,
                         class_name = "瑜珈入門",
@@ -28,13 +28,13 @@ namespace gym_system.Api.Tests
                 ]
             };
 
-            var handler = new GetClassesListHandler(fake);
+            var handler = new GetCoursesListHandler(fake);
             var sut = new ClassController(handler);
 
             var action = await sut.GetClassesAsync(includeInactive: false, CancellationToken.None);
             var ok = Assert.IsType<OkObjectResult>(action.Result);
-            var response = Assert.IsType<GetClassesResponse>(ok.Value);
-            var item = Assert.Single(response.ClassInfoList!);
+            var response = Assert.IsType<GetCourseResponse>(ok.Value);
+            var item = Assert.Single(response.CoursesInfoList!);
 
             Assert.Equal("1", item.Id);
             Assert.Equal("瑜珈入門", item.Name);
@@ -49,7 +49,7 @@ namespace gym_system.Api.Tests
         public async Task GetClassesAsync_ShouldForwardIncludeInactiveToQueryService()
         {
             var fake = new FakeClassCatalogQueryService();
-            var handler = new GetClassesListHandler(fake);
+            var handler = new GetCoursesListHandler(fake);
             var sut = new ClassController(handler);
 
             await sut.GetClassesAsync(includeInactive: true, CancellationToken.None);
@@ -65,24 +65,24 @@ namespace gym_system.Api.Tests
                 Result = []
             };
 
-            var handler = new GetClassesListHandler(fake);
+            var handler = new GetCoursesListHandler(fake);
             var sut = new ClassController(handler);
 
             var action = await sut.GetClassesAsync(includeInactive: null, CancellationToken.None);
             var ok = Assert.IsType<OkObjectResult>(action.Result);
-            var response = Assert.IsType<GetClassesResponse>(ok.Value);
+            var response = Assert.IsType<GetCourseResponse>(ok.Value);
 
-            Assert.NotNull(response.ClassInfoList);
-            Assert.Empty(response.ClassInfoList!);
+            Assert.NotNull(response.CoursesInfoList);
+            Assert.Empty(response.CoursesInfoList!);
             Assert.Null(fake.LastIncludeInactive);
         }
 
-        private sealed class FakeClassCatalogQueryService : IClassCatalogQueryService
+        private sealed class FakeClassCatalogQueryService : ICourseCatalogQueryService
         {
             public bool? LastIncludeInactive { get; private set; }
-            public IReadOnlyList<ClassResult> Result { get; set; } = [];
+            public IReadOnlyList<CourseResult> Result { get; set; } = [];
 
-            public Task<IReadOnlyList<ClassResult>> GetClassesAsync(bool? includeInactive, CancellationToken ct)
+            public Task<IReadOnlyList<CourseResult>> GetClassesAsync(bool? includeInactive, CancellationToken ct)
             {
                 LastIncludeInactive = includeInactive;
                 return Task.FromResult(Result);

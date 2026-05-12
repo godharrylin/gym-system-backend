@@ -1,11 +1,11 @@
-﻿namespace gym_system.Api.Contracts.Classes
+﻿namespace gym_system.Api.Contracts.Courses
 {
-    public class GetClassesResponse
+    public class GetCourseResponse
     {
-        public IReadOnlyList<ClassDto>? ClassInfoList { get; set; }
+        public IReadOnlyList<CourseDto>? CoursesInfoList { get; set; }
     }
 
-    public class ClassDto
+    public class CourseDto
     {
         public required string Id { get; set; }
         public required string Name { get; set; }

@@ -76,7 +76,7 @@ namespace gym_system.Infrastructures
                     cancellationToken: ct)
             );
 
-            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_phone)
+            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_phone, row.usr_active)
                 : null;
         }
 
@@ -100,7 +100,7 @@ namespace gym_system.Infrastructures
                     cancellationToken: ct)
             );
 
-            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_phone)
+            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_phone, row.usr_active)
                 : null;
         }
 

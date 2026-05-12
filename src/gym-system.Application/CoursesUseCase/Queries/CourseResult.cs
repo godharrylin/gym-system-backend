@@ -1,6 +1,6 @@
-namespace gym_system.Application.ClassesUseCase.Queries
+namespace gym_system.Application.CoursesUseCase.Queries
 {
-    public sealed class ClassResult
+    public sealed class CourseResult
     {
         public int class_sn { get; set; }
         public string class_name { get; set; } = string.Empty;
