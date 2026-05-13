@@ -84,6 +84,49 @@ namespace gym_system.Infrastructures
             return affected > 0;
         }
 
+        public async Task<bool> AddAsync(Course course, CancellationToken ct)
+        {
+            const string sql = """
+                INSERT INTO dbo.class (
+                    class_name,
+                    class_label_color,
+                    class_duration,
+                    class_is_free,
+                    class_default_instructor_id,
+                    class_default_instructor_name,
+                    class_is_active,
+                    class_type
+                ) VALUES (
+                    @Name,
+                    @LabelColor,
+                    @Duration,
+                    @IsFree,
+                    @DefaultInstructorId,
+                    @DefaultInstructorName,
+                    @IsActive,
+                    @Type
+                );
+                """;
+
+            var affected = await _session.Connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new
+                {
+                    course.Name,
+                    course.LabelColor,
+                    course.Duration,
+                    course.IsFree,
+                    course.DefaultInstructorId,
+                    course.DefaultInstructorName,
+                    course.IsActive,
+                    course.Type
+                },
+                transaction: _session.Transaction,
+                cancellationToken: ct));
+
+            return affected > 0;
+        }
+
         private sealed record CourseRow
         {
             public required string class_id { get; set; }

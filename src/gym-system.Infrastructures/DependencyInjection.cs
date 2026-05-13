@@ -55,6 +55,7 @@ namespace gym_system.Infrastructures
             services.AddScoped<IClock, SystemClock>();
             services.AddScoped<IUserRepository, SqlUserRepository>();
             services.AddScoped<IUserRoleRepository, SqlUserRoleRepository>();
+            services.AddScoped<ICourseRepository, SqlCourseRepository>();
             services.AddScoped<IInstructorQueryService, DapperGetInstructorsQueryService>();
             services.AddScoped<ISqlSession, SqlSession>();
             DapperConfig.Register();

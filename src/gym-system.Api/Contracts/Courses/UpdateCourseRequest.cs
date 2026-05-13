@@ -2,7 +2,6 @@
 {
     public class UpdateCourseRequest
     {
-        public required string Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public required string InstructorId { get; set; }
         public required int Duration { get; set; }

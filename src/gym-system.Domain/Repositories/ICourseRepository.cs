@@ -6,5 +6,6 @@ namespace gym_system.Domain.Repositories
     {
         public Task<Course?> GetByIdAsync(string courseId, CancellationToken ct);
         public Task<bool> UpdateAsync(Course course, CancellationToken ct);
+        public Task<bool> AddAsync(Course course, CancellationToken ct);
     }
 }

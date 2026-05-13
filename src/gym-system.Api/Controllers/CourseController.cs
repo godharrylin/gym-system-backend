@@ -11,12 +11,14 @@ namespace gym_system.Api.Controllers
     {
         private readonly GetCoursesListHandler _getCoursesListHandler;
         private readonly UpdateCourseHandler _updateCourseHandler;
+        private readonly CreateCourseHandler _createCourseHandler;
 
         public CourseController(GetCoursesListHandler getCoursesListHandler,
-            UpdateCourseHandler updateCourseHandler)
+            UpdateCourseHandler updateCourseHandler, CreateCourseHandler createCourseHandler)
         {
             _getCoursesListHandler = getCoursesListHandler;
             _updateCourseHandler = updateCourseHandler;
+            _createCourseHandler = createCourseHandler;
         }
 
         /// <summary>
@@ -49,19 +51,19 @@ namespace gym_system.Api.Controllers
         }
 
         /// <summary>
-        /// 更新預設課程資訊，Course 預設課程， Class是某一堂課程
+        /// 更新預設課程資訊
         /// </summary>
         /// <param name="id">預設課程 ID</param>
-        /// <param name="command"></param>
+        /// <param name="request"></param>
         /// <param name="ct"></param>
         /// <returns></returns>
         [HttpPost("{id}")]
-        public async Task<ActionResult> UpdateCourseAsync( [FromRoute] string id, [FromBody] UpdateCourseRequest request, 
+        public async Task<IActionResult> UpdateCourseAsync([FromRoute] string id, [FromBody] UpdateCourseRequest request, 
             CancellationToken ct)
         {
             var command = new UpdateCourseCommand
             {
-                Id = request.Id,
+                Id = id,
                 Name = request.Name,
                 InstructorId = request.InstructorId,
                 Duration = request.Duration,
@@ -69,6 +71,29 @@ namespace gym_system.Api.Controllers
                 LabelColor = request.Color
             };
             var result = await _updateCourseHandler.Handle(id, command, ct);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// 新增預設課程
+        /// </summary>
+        /// <param name="request"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        [HttpPost]
+        public async Task<ActionResult<bool>> CreateCourseAsync([FromBody] CreateCourseRequest request, CancellationToken ct)
+        {
+            var command = new CreateCourseCommand
+            {
+                Name = request.Name,
+                InstructorId = request.InstructorId,
+                Duration = request.Duration,
+                LabelColor = request.Color,
+                IsFree = request.IsFree ?? false,
+                Type = request.Type ?? ""
+            };
+
+            var result = await _createCourseHandler.Handle(command, ct);
             return Ok(result);
         }
     }

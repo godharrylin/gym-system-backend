@@ -18,6 +18,7 @@ builder.Services.AddScoped<UpdateInstructorHandler>();
 builder.Services.AddScoped<GetInstructorsListHandler>();
 builder.Services.AddScoped<GetCoursesListHandler>();
 builder.Services.AddScoped<UpdateCourseHandler>();
+builder.Services.AddScoped<CreateCourseHandler>();
 /* Mock Connection */
 //builder.Services.AddScoped<RegisterMemberHandler>();
 //builder.Services.AddInfrastructureInMemory();
