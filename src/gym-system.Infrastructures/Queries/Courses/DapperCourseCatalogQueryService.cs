@@ -14,14 +14,14 @@ namespace gym_system.Infrastructures.Queries.Courses
             _connectionFactory = connectionFactory;
         }
 
-        public async Task<IReadOnlyList<CourseResult>> GetClassesAsync(bool? isActive, CancellationToken ct)
+        public async Task<IReadOnlyList<CourseResult>> GetClassesAsync(bool? includeInactive, CancellationToken ct)
         {
             var sql = new StringBuilder();
             sql.Append("""
                 SELECT
                     c.class_sn,
                     c.class_name,
-                    u.usr_name,
+                    COALESCE(u.usr_name, c.class_default_instructor_name, '') AS usr_name,
                     c.class_label_color,
                     c.class_duration,
                     c.class_is_free,
@@ -29,16 +29,17 @@ namespace gym_system.Infrastructures.Queries.Courses
                     c.class_type
                 FROM dbo.[class] c
                 LEFT JOIN dbo.users u
-                    ON u.usr_id = c.class_instructor_id
+                    ON u.usr_id = c.class_default_instructor_id
                 WHERE 1=1
             """);
 
             var param = new DynamicParameters();
 
-            if (isActive.HasValue)
+            // includeInactive=true: 顯示全部；false/null: 只顯示上架
+            if (includeInactive != true)
             {
                 sql.Append(" AND c.class_is_active = @isActiveFlag ");
-                param.Add("isActiveFlag", isActive.Value);
+                param.Add("isActiveFlag", true);
             }
 
             sql.Append(" ORDER BY c.class_sn;");
