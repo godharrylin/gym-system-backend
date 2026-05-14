@@ -1,6 +1,7 @@
 # Database New
 
 - 人員資料表 **`users`**
+    - 所有角色共用的基本資料。
     - Create Table Code
         
         ```sql
@@ -34,7 +35,6 @@
         (N'老師2',   '0922111222', 1);
         ```
         
-    - 所有角色共用的基本資料。
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
@@ -278,7 +278,7 @@
     | **`operator_id`** | Varchar | 操作者 ID（是誰改的） | `admin_01` |
     | **`log_dt`** | DateTime | 紀錄產生的時間 | 2026-03-13 14:00:00 |
     | **`remark`** | Text | 備註（選填） | 學生現場付現、手動折扣 60 元 |
-- 票券種類表 `ticket_plan_kind`
+- 票券種類表 **`ticket_plan_kind`**
     - 負責分類票券種類
     - Create Table code
         
@@ -593,47 +593,263 @@
     | **`class_create_dt`** | DateTime | 建立日期 |  |
     | **`class_up_pn`**  | Foreign key | 更新人員 |  |
     | **`class_up_dt`**  | DateTime | 更新日期 |  |
-- 排課規則表 `cls_scdle_rules`
+- 排課規則表 **`cls_scdle_rules`**
     - 這張資料表會作為schedule template 使用。
+    - Create Table
+        
+        ```sql
+        CREATE TABLE dbo.cls_scdle_rules (
+            -- 規則唯一編號 (主鍵，自動遞增)
+            cls_scdle_rules_sn				  INT             IDENTITY(1,1) NOT NULL,
+            -- 關聯到 class 表
+            class_id						        VARCHAR(15)     NOT NULL,
+            -- 星期幾 (1-7)
+            cls_scdle_rules_day_wk			INT             NOT NULL,
+            -- 開始時間 (不含日期)
+            cls_scdle_rules_st				  TIME            NOT NULL,
+        	  -- 上課時長
+        	  cls_scdle_duration				  INT				      NOT NULL, 
+        	  -- 結束時間 (由資料庫自動計算：開始時間 + 時長，並實體儲存)
+            cls_scdle_rules_et AS (CAST(DATEADD(MINUTE, cls_scdle_duration, cls_scdle_rules_st) AS TIME)) PERSISTED,
+        	  -- 結束後的緩衝時間 (分鐘)
+        	  cls_scdle_rules_buffer_time		INT				NOT NULL,
+            -- 老師 ID 
+            cls_scdle_instructor_id			VARCHAR(21)     NOT NULL,
+            -- 此規則是否還在執行，用來Soft delete (預設為 1: true)
+            cls_scdle_rules_is_active		BIT             NOT NULL CONSTRAINT DF_cls_scdle_rules_is_active DEFAULT (1),
+            -- 定義主鍵
+            CONSTRAINT PK_cls_scdle_rules	PRIMARY KEY (cls_scdle_rules_sn)
+        );
+        
+        -- 新增排課規則範本
+        INSERT INTO dbo.cls_scdle_rules (
+            class_id, 
+            cls_scdle_rules_day_wk, 
+            cls_scdle_rules_st, 
+            cls_scdle_duration, 
+            cls_scdle_rules_buffer_time, 
+            cls_scdle_instructor_id, 
+            cls_scdle_rules_is_active
+        )
+        VALUES 
+        -- 規則 1：每週一 09:00，基礎重量訓練 (60分鐘)，換場緩衝 15 分鐘
+        ('CLS000001', 1, '09:00:00', 60, 15, 'U0000000001', 1),
+        
+        -- 規則 2：每週三 18:30，極限燃脂拳擊 (50分鐘)，換場緩衝 10 分鐘
+        ('CLS000002', 3, '18:30:00', 50, 10, 'U0000000002', 1),
+        
+        -- 規則 3：每週五 20:00，舒緩陰瑜珈 (90分鐘)，換場緩衝 15 分鐘
+        ('CLS000003', 5, '20:00:00', 90, 15, 'U0000000001', 1),
+        
+        -- 規則 4：每週六 10:00，核心皮拉提斯 (70分鐘，依據圖片)，換場緩衝 10 分鐘
+        ('CLS000004', 6, '10:00:00', 70, 10, 'U0000000003', 1);
+        ```
+        
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
     | **`cls_scdle_rules_sn`** | Primary Key | 規則唯一編號 | 1 |
-    | **`class_sn`** | Foreign Key | 關聯到 `class`表 | 10 (瑜珈課) |
-    | **`cls_scdle_rules_day_wk`** | Int | 星期幾 (1-7 或 0-6) | 1 (週一) |
+    | **`class_id`** | varchar(15) | 關聯到 `class`表 | CLS000004 |
+    | **`cls_scdle_rules_day_wk`** | Int | 星期幾 (1-7 ) | 1 (週一) |
     | **`cls_scdle_rules_st`** | Time | 開始時間 (不含日期) | 09:00:00 |
-    | **`instructor_id`** | Foreign Key | 預設老師 ID (若不填則抓 class 表的) | admin_01 |
-    | **`cls_scdle_rules_is_active`** | Boolean | 此規則是否還在執行 | true |
-- 排課實例表 `cls_scdle_arnge`
-    - 記錄實際安排的課程
+    | **`cls_scdle_rules_duration`** | int | 上課時長(分鐘) |  |
+    | **`cls_scdle_rules_et`** | Time | 結束時間 (不含日期) = 開始時間+上課時長。
+    避免獨立儲存結束時間造成資料不一致問題 |  |
+    | **`cls_scdle_rules_buffer_time`** | int | 結束後緩衝時間(分鐘) |  |
+    | **`instructor_id`** | varchar(21) | 關連到 `user_role`表，老師 ID | U0000000003 |
+    | **`cls_scdle_rules_is_active`** | Boolean | 此規則是否還在執行，用來Soft delete | true |
+- 排課實例表 **`cls_scdle_arnge`**
+    - 記錄實際安排的課程表
+    - Create Table
+        
+        ```sql
+        CREATE TABLE dbo.cls_scdle_arnge (
+            -- 排課流水號 (主鍵，自動遞增)
+            cls_scdle_arnge_sn              INT             IDENTITY(1,1) NOT NULL,
+            
+            -- 獨立日期欄位 (往上移，讓下方的 ID 可以取用它)
+            cls_scdle_date                  DATE            NOT NULL,
+            
+            -- 唯一ID (由資料庫自動計算：CLS + YYYYMMDD + 7碼流水號)
+            cls_scdle_arnge_id AS (
+                'CLS' + 
+                CONVERT(VARCHAR(8), cls_scdle_date, 112) + 
+                RIGHT(REPLICATE('0', 7) + CAST(cls_scdle_arnge_sn AS VARCHAR(7)), 7)
+            ) PERSISTED,
+            
+            -- 關聯到 class 表
+            class_id                        VARCHAR(15)     NOT NULL,
+            
+            -- 課程名稱快照
+            class_name                      NVARCHAR(100)   NULL,
+            
+            -- 標籤顏色快照
+            class_label_color               NVARCHAR(20)    NULL,
+            
+            -- 這堂課當前的指導老師，關聯到 users
+            cls_scdle_arnge_instructor_id   VARCHAR(21)     NULL, 
+            
+            -- 授課老師名字快照
+            instructor_name                 NVARCHAR(50)    NULL,
+            
+            -- 課程開始時間
+            cls_scdle_arnge_st              DATETIME        NOT NULL,
+            
+            -- 課程結束時間
+            cls_scdle_arnge_et              DATETIME        NOT NULL,
+            
+            -- 該課程狀態 (Cancel, Open, Ongoing, Finished)
+            cls_scdle_status                VARCHAR(50)     NOT NULL CONSTRAINT DF_cls_scdle_arnge_status DEFAULT ('Open'),
+            
+            -- 課程目前異動/新增來源 (Auto, Manual)
+            cls_scdle_source                VARCHAR(20)     NOT NULL CONSTRAINT DF_cls_scdle_arnge_source DEFAULT ('Auto'),
+            
+            -- 關聯到 cls_scdle_rules 用Soft reference
+            cls_scdle_rules_sn              INT             NULL,
+            
+            -- 建立時間 (預設為當前時間)
+            cls_scdle_arnge_create_dt       DATETIME        NOT NULL CONSTRAINT DF_cls_scdle_arnge_create_dt DEFAULT (GETDATE()),
+            
+            -- 更新時間 (預設為當前時間)
+            cls_scdle_arnge_up_dt           DATETIME        NOT NULL CONSTRAINT DF_cls_scdle_arnge_up_dt DEFAULT (GETDATE()),
+        
+            -- 定義主鍵
+            CONSTRAINT PK_cls_scdle_arnge PRIMARY KEY (cls_scdle_arnge_sn),
+            
+            -- 定義唯一約束條件，確保產生的 ID 絕對不會重複
+            CONSTRAINT UQ_cls_scdle_arnge_id UNIQUE (cls_scdle_arnge_id)
+        );
+        
+        -- 新增實際排課資料
+        INSERT INTO dbo.cls_scdle_arnge (
+            cls_scdle_date,
+            class_id, 
+            class_name, 
+            class_label_color, 
+            cls_scdle_arnge_instructor_id, 
+            instructor_name, 
+            cls_scdle_arnge_st, 
+            cls_scdle_arnge_et, 
+            cls_scdle_status, 
+            cls_scdle_source, 
+            cls_scdle_rules_sn
+        )
+        VALUES 
+        -- 實例 1：來自規則 1 (週一)。狀態: 已結束 (Finished)
+        ('2026-05-18', 'CLS000001', N'基礎重量訓練', '#FF5733', 'U0000000001', N'管理員1', 
+         '2026-05-18 09:00:00', '2026-05-18 10:00:00', 'Finished', 'Auto', 1),
+        
+        -- 實例 2：來自規則 2 (週三)。注意：原本是老師小美，這邊假設因為請假換成老師1來代課，狀態: 開放中 (Open)
+        ('2026-05-20', 'CLS000002', N'極限燃脂拳擊', '#C70039', 'U0000000006', N'老師1', 
+         '2026-05-20 18:30:00', '2026-05-20 19:20:00', 'Open', 'Auto', 2),
+        
+        -- 實例 3：來自規則 3 (週五)。狀態: 開放中 (Open)
+        ('2026-05-22', 'CLS000003', N'舒緩陰瑜珈', '#DAF7A6', 'U0000000001', N'管理員1', 
+         '2026-05-22 20:00:00', '2026-05-22 21:30:00', 'Open', 'Auto', 3),
+        
+        -- 實例 4：手動加開 (Manual)。沒有對應規則 (rules_sn = NULL)。狀態: 取消 (Cancel)
+        ('2026-05-24', 'CLS000007', N'臀大肌推舉訓練', '#FF5733', 'U0000000006', N'老師1', 
+         '2026-05-24 14:00:00', '2026-05-24 14:30:00', 'Cancel', 'Manual', NULL);
+        ```
+        
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
     | **`cls_scdle_arnge_sn`** |  | 排課流水號 |  |
-    | **`class_sn`** |  | 關連到**`class`** 表 |  |
+    | **`cls_scdle_arnge_id`** |  | 唯一ID，CLS+西元年+月份+日期+**`cls_scdle_arnge_sn`** 向左補7個0 |  |
+    | **`class_id`** | varchar(15) | 關連到**`class`** 表 |  |
+    | **`class_name`** | NVARCHAR(100) | 課程名稱快照 |  |
+    | **`class_label_color`** | nvarchar(20) | 標籤顏色快照 |  |
+    | **`cls_scdle_arnge_instructor_id`** | varChar(21) | 這堂課當前的指導老師
+    關連到**`users`** |  |
+    | **`instructor_name`** | nvarchar(50) | 授課老師名字快照 |  |
+    | **`cls_scdle_date`**  | DATE | 獨立日期欄位，方便以「天」為單位查詢 |  |
     | **`cls_scdle_arnge_st`** | DateTime | 課程開始時間 |  |
     | **`cls_scdle_arnge_et`** | DateTime | 課程結束時間 |  |
-    | **`cls_scdle_arnge_instructor_id`** |  | 這堂課當前的指導老師
-    關連到**`users`** |  |
-    | **`cls_scdle_arnge_wk_day`** |  | 該堂課是星期幾 |  |
-    | **`cls_scdle_status`** |  | 開課狀態
+    | **`cls_scdle_status`** | varchar(50) | 該課程狀態
       • **`Cancel`**
-      • **`Open`** |  |
-    | **`cls_scdle_rule`** |  | 產生課程規則
+      • **`Open`
+      • `Ongoing`
+      • `Finished`** |  |
+    | **`cls_scdle_source`** | varchar(20) | 課程目前異動/新增來源
       • `Auto`
       • `Manual` |  |
-    | **`cls_scdle_arnge_create_dt`** |  | 建立時間 |  |
-    | **`cls_scdle_arnge_up_dt`** |  | 更新時間 |  |
-- 排課異動表 `cls_scdle_arnge_log`
-    
+    | **`cls_scdle_rules_sn`** |  | 關連到`cls_scdle_rules`
+    用Soft reference |  |
+    | **`cls_scdle_arnge_create_dt`** | datetime | 建立時間 |  |
+    | **`cls_scdle_arnge_up_dt`** | datetime | 更新時間 |  |
+- 排課異動表 **`cls_scdle_arnge_log`**
+    - 將課程異動存入JSON/Text，格式如下:
+        
+        ```json
+        {
+          "instructor_id": { "old": "admin_01", "new": "admin_05" },
+          "st_time": { "old": "09:00", "new": "10:00" },
+          "status": { "old": "normal", "new": "changed" }
+        }
+        ```
+        
+    - Create Table
+        
+        ```sql
+        CREATE TABLE dbo.cls_scdle_arnge_log (
+            -- 紀錄流水號 (主鍵，自動遞增)
+            cls_scdle_arnge_log_sn      INT             IDENTITY(1,1) NOT NULL,
+            
+            -- 關聯到排課實例表 (哪一堂課被改了)
+            cls_scdle_arnge_sn          INT             NOT NULL,
+            
+            -- 異動資料欄位與值 (儲存 JSON 格式)
+            cls_scdle_changed_data      NVARCHAR(MAX)   NOT NULL,
+            
+            -- 操作者 ID (長度設定 50 較有彈性，可依您的 users 表調整)
+            operator_id                 VARCHAR(50)     NOT NULL,
+            
+            -- 紀錄產生的時間 (預設帶入當前時間)
+            cls_scdle_arnge_log_dt      DATETIME        NOT NULL CONSTRAINT DF_cls_scdle_arnge_log_dt DEFAULT (GETDATE()),
+            
+            -- 異動原因 (選填)
+            cls_scdle_arnge_log_remark  NVARCHAR(MAX)   NULL,
+        
+            -- 定義主鍵
+            CONSTRAINT PK_cls_scdle_arnge_log PRIMARY KEY (cls_scdle_arnge_log_sn),
+            
+            -- (選擇性強烈建議) 確保寫入的異動資料真的是合法的 JSON 格式
+            CONSTRAINT CK_cls_scdle_changed_data_IsJson CHECK (ISJSON(cls_scdle_changed_data) = 1)
+        );
+        
+        -- 新增排課異動紀錄
+        INSERT INTO dbo.cls_scdle_arnge_log (
+            cls_scdle_arnge_sn, 
+            cls_scdle_changed_data, 
+            operator_id, 
+            cls_scdle_arnge_log_remark
+        )
+        VALUES 
+        -- 紀錄 1：對應實例 2 (cls_scdle_arnge_sn = 2)，原本是 U0000000002 (老師小美)，後來換成 U0000000006 (老師1)
+        (2, 
+         N'{
+            "cls_scdle_arnge_instructor_id": { "old": "U0000000002", "new": "U0000000006" },
+            "instructor_name": { "old": "老師小美", "new": "老師1" }
+         }', 
+         'admin_01', 
+         N'原老師小美生病請假，由老師1代課'),
+        
+        -- 紀錄 2：對應實例 4 (cls_scdle_arnge_sn = 4)，課程被取消
+        (4, 
+         N'{
+            "cls_scdle_status": { "old": "Open", "new": "Cancel" }
+         }', 
+         'admin_01', 
+         N'報名人數不足，手動取消課程');
+        ```
+        
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
     | **`cls_scdle_arnge_log_sn`** | Primary Key | 紀錄流水號 | 1, 2, 3... |
-    | **`cls_scdle_arnge_log_sn`** | Foreign Key | 關聯到 `cls_scdle_arnge` | 501 (哪一堂課被改了) |
-    | **`cls_scdle_arnge_log_t_col`** | VarChar | 變動的欄位名稱 | `instructor_id`, `st_time`, `status` |
-    | **`cls_scdle_arnge_log_old_value`** | NVarChar | 變更前的值 | admin_01 (舊老師) |
-    | **`cls_scdle_arnge_log_new_value`** | NVarChar | 變更後的值 | admin_05 (新老師) |
+    | **`cls_scdle_arnge_sn`** | Foreign Key | 關聯到 `cls_scdle_arnge` | 501 (哪一堂課被改了) |
+    | **`cls_scdle_changed_data`** |  | 異動資料欄位與值 |  |
     | **`operator_id`** | VarChar | 操作者 ID | admin_01 |
     | **`cls_scdle_arnge_log_dt`** | DateTime | 紀錄產生的時間 | 2026-03-13 14:00:00 |
     | **`cls_scdle_arnge_log_remark`** | Text | 異動原因 (選填)
