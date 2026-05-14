@@ -1,7 +1,7 @@
 using gym_system.Domain.Enums;
 using gym_system.Domain.Repositories;
 
-namespace gym_system.Application.InstructorUseCase.Command.UpdateInstructor
+namespace gym_system.Application.InstructorsUseCase.Command.UpdateInstructor
 {
     public sealed class UpdateInstructorHandler
     {

@@ -11,7 +11,7 @@ public sealed class TicketPlansControllerTest
     [Fact]
     public async Task GetActiveTicketPlansAsync_ShouldReturnMappedResponse()
     {
-        var fake = new FakeTicketPlanCatalogQuerySerivce
+        var fake = new FakeTicketPlanCatalogQueryService
         {
             Result = 
             [
@@ -40,7 +40,7 @@ public sealed class TicketPlansControllerTest
     [Fact]
     public async Task GetActiveTicketPlansAsync_ShouldReturnCorrectTicketName()
     {
-        var fake = new FakeTicketPlanCatalogQuerySerivce
+        var fake = new FakeTicketPlanCatalogQueryService
         {
             Result = 
                 [
@@ -57,7 +57,7 @@ public sealed class TicketPlansControllerTest
         };
     }
 
-    private sealed class FakeTicketPlanCatalogQuerySerivce : ITicketPlanCatalogQuerySerivce
+    private sealed class FakeTicketPlanCatalogQueryService : ITicketPlanCatalogQueryService
     {
         public IReadOnlyList<TicketPlanResult> Result { get; set; } = [];
         public Task<IReadOnlyList<TicketPlanResult>> GetActiveTicketPlansAsync(CancellationToken ct)

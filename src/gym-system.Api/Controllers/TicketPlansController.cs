@@ -9,16 +9,16 @@ namespace gym_system.Api.Controllers
 
     public class TicketPlansController : ControllerBase
     {
-        private readonly ITicketPlanCatalogQuerySerivce _ticketPlanQuerySerivce;
-        public TicketPlansController(ITicketPlanCatalogQuerySerivce ticketPlanQuerySerivce)
+        private readonly ITicketPlanCatalogQueryService _ticketPlanQueryService;
+        public TicketPlansController(ITicketPlanCatalogQueryService ticketPlanQueryService)
         {
-            _ticketPlanQuerySerivce = ticketPlanQuerySerivce;
+            _ticketPlanQueryService = ticketPlanQueryService;
         }
 
         [HttpGet]
         public async Task<ActionResult<GetTicketPlansResponse>> GetActiveTicketPlansAsync(CancellationToken ct)
         {
-            IReadOnlyList<TicketPlanResult> result = await _ticketPlanQuerySerivce.GetActiveTicketPlansAsync(ct);
+            IReadOnlyList<TicketPlanResult> result = await _ticketPlanQueryService.GetActiveTicketPlansAsync(ct);
 
             //  在這裡轉成前端需要的格式
             var response = new GetTicketPlansResponse

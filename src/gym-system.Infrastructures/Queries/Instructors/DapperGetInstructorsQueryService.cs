@@ -1,5 +1,5 @@
-﻿using Dapper;
-using gym_system.Application.InstructorUseCase.Queries;
+using Dapper;
+using gym_system.Application.InstructorsUseCase.Queries;
 using gym_system.Infrastructures.Connections;
 
 namespace gym_system.Infrastructures.Queries.Instructors
@@ -13,7 +13,7 @@ namespace gym_system.Infrastructures.Queries.Instructors
         }
 
 
-        public async Task<IReadOnlyList<InstrucotrResult>> GetInstructorsAsync(CancellationToken ct)
+        public async Task<IReadOnlyList<InstructorResult>> GetInstructorsAsync(CancellationToken ct)
         {
             const string sql = """
                     SELECT
@@ -37,7 +37,7 @@ namespace gym_system.Infrastructures.Queries.Instructors
                 cancellationToken: ct
             );
 
-            var rows = await conn.QueryAsync<InstrucotrResult>(cmd);
+            var rows = await conn.QueryAsync<InstructorResult>(cmd);
             return rows.AsList();
         }
     }

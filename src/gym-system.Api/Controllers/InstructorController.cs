@@ -1,8 +1,8 @@
 using gym_system.Api.Contracts.Instructors;
 using gym_system.Api.Contracts.TicketPlans;
-using gym_system.Application.InstructorUseCase.Command.CreateInstructor;
-using gym_system.Application.InstructorUseCase.Command.UpdateInstructor;
-using gym_system.Application.InstructorUseCase.Queries;
+using gym_system.Application.InstructorsUseCase.Command.CreateInstructor;
+using gym_system.Application.InstructorsUseCase.Command.UpdateInstructor;
+using gym_system.Application.InstructorsUseCase.Queries;
 using Microsoft.AspNetCore.Mvc;
 
 namespace gym_system.Api.Controllers
@@ -83,3 +83,4 @@ namespace gym_system.Api.Controllers
         }
     }
 }
+

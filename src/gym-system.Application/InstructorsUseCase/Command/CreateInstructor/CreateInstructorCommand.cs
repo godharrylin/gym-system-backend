@@ -1,4 +1,4 @@
-﻿namespace gym_system.Application.InstructorUseCase.Command.CreateInstructor
+namespace gym_system.Application.InstructorsUseCase.Command.CreateInstructor
 {
     public sealed class CreateInstructorCommand
     {

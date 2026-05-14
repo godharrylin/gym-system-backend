@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Update.Internal;
 
 namespace gym_system.Infrastructures.Queries.TicketPlans
 {
-    internal sealed class DapperTicketPlanCatalogQueryService : ITicketPlanCatalogQuerySerivce
+    internal sealed class DapperTicketPlanCatalogQueryService : ITicketPlanCatalogQueryService
     {
         private readonly ISqlConnectionFactory _factory;
 

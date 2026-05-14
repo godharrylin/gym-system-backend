@@ -1,4 +1,5 @@
-using gym_system.Application.InstructorUseCase.Queries;
+using gym_system.Application.InstructorsUseCase.Queries;
+using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
@@ -7,6 +8,7 @@ using gym_system.Domain.Repositories;
 using gym_system.Infrastructures.Connections;
 using gym_system.Infrastructures.Dapper;
 using gym_system.Infrastructures.Queries.Instructors;
+using gym_system.Infrastructures.Queries.Courses;
 using gym_system.Infrastructures.Queries.TicketPlans;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -28,7 +30,8 @@ namespace gym_system.Infrastructures
             services.AddScoped<ITicketPassRepository, InMemoryTicketPassRepository>();
             
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
-            services.AddScoped<ITicketPlanCatalogQuerySerivce, DapperTicketPlanCatalogQueryService>();
+            services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
+            services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
 
             return services;
         }
@@ -39,7 +42,8 @@ namespace gym_system.Infrastructures
             services.AddCommonInfrastructure();
 
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
-            services.AddScoped<ITicketPlanCatalogQuerySerivce, DapperTicketPlanCatalogQueryService>();
+            services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
+            services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
 
             return services;
         }
@@ -51,9 +55,12 @@ namespace gym_system.Infrastructures
             services.AddScoped<IClock, SystemClock>();
             services.AddScoped<IUserRepository, SqlUserRepository>();
             services.AddScoped<IUserRoleRepository, SqlUserRoleRepository>();
+            services.AddScoped<ICourseRepository, SqlCourseRepository>();
             services.AddScoped<IInstructorQueryService, DapperGetInstructorsQueryService>();
             services.AddScoped<ISqlSession, SqlSession>();
             DapperConfig.Register();
+            services.AddScoped<ICourseRepository, SqlCourseRepository>();
+            services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
             return services;
         }
     }

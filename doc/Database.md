@@ -14,6 +14,7 @@
             
             [usr_name] NVARCHAR(50) NOT NULL,
             [usr_phone] VARCHAR(20) NOT NULL,
+            // 1:啟用, 0:不啟用
             [usr_active] BIT DEFAULT 1,
             [usr_create_dt] DATETIME DEFAULT GETDATE(),
         
@@ -85,7 +86,7 @@
       • 管理者→ `Admin` |  |
     | **`bmc_role_cdt`** | DateTime | 建立日期 |  |
     | **`bmc_role_upd_dt`** | DateTime | 更新日期 |  |
-- 人員角色關聯資料表 `user_role`
+- 人員角色關聯資料表 **`user_role`**
     - 一個人可以有多個角色
     - **`usr_id`** 、**`bmc_role_id`** 當作複合主鍵
     - Create Table code
@@ -94,6 +95,7 @@
         CREATE TABLE dbo.user_role (
             usr_id               NVARCHAR(50)  NOT NULL,
             bmc_role_id          INT           NOT NULL,
+            // 1:啟用, 0:不啟用
             user_role_is_active  BIT   NOT NULL CONSTRAINT DF_user_role_is_active DEFAULT (1),
             user_role_cdt        DATETIME2(0)  NOT NULL CONSTRAINT DF_user_role_cdt DEFAULT (SYSDATETIME()),
             user_role_upd_dt      DATETIME2(0)  NOT NULL CONSTRAINT DF_user_role_upd_dt DEFAULT (SYSDATETIME()),
@@ -120,7 +122,7 @@
     | **`user_role_is_active`** | bool | 身分別是否啟用 |  |
     | **`user_role_cdt`** | DateTime | 建立日期 |  |
     | **`user_role_upd_dt`** | DateTime | 更新日期 |  |
-- 學生擴展表 `sdt_profile`
+- 學生擴展表 **`sdt_profile`**
     - 目前這張表當作快取中心，放的內容是最近一次進場時間及最新的票券，包含剩餘堂數。
     - 未來可以擴充緊急連絡人等靜態欄位資訊
     - 該表更新時機
@@ -140,7 +142,7 @@
     | `sdt_cur_ticket_remain_count` | int(nullable) | 最新一筆票券的剩餘堂數(堂票才會有) |  |
     | `sdt_cur_ticket_expire_dt` | DateTime | 最新一筆票券的到期日 |  |
     | `sdt_cur_ticket_up_dt` | DateTime | 更新時間戳 |  |
-- 學生票券資料表 `sdt_ticket_pass`
+- 學生票券資料表 **`sdt_ticket_pass`**
     - 學生持有的票券資訊，包括、到期日、使用次數、付款狀態，等使用權利
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
@@ -183,7 +185,7 @@
     | **`sdt_att_record_upd_by_staff`** | varChar | 如果是員工補登，此欄位會顯示員工的id |
     | **`sdt_att_record_upd_date`** | DateTime | 資料異動時間 |
     
-- 票券核銷表 `sdt_ticket_usage_log`
+- 票券核銷表 **`sdt_ticket_usage_log`**
     - 學生票券的使用紀錄，Insert only
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
@@ -513,14 +515,19 @@
     | **`products_is_active`** | boolean | 是否上架 |  |
     | **`products_create_dt`** | DateTime | 商品建立日 |  |
     | **`products_update_dt`** | DateTime | 最後更新時間(最後異動庫存時間) |  |
-- 課程定義表 `class`
-    - 紀錄課程資訊
+- 預設課程表 **`class`**
+    - 課程預設資訊，實際排課表是在`cls_scdle_arnge`
     - Create Table Code
         
         ```sql
          CREATE TABLE dbo.class (
             -- 課程序號 (主鍵)
             class_sn            INT             IDENTITY(1,1) NOT NULL,
+            -- 1. 先定義計算資料行與 PERSISTED
+            class_id AS ('CLS' + RIGHT(REPLICATE('0', 6) + CAST(class_sn AS VARCHAR(6)), 6)) PERSISTED,
+            -- 2. 獨立宣告 UNIQUE 約束條件
+            CONSTRAINT UQ_class_id UNIQUE (class_id),
+                
             -- 課程名稱
             class_name          NVARCHAR(100)   NULL,
             -- 標籤顏色
@@ -528,11 +535,13 @@
             -- 課程時長
             class_duration      INT             NULL,
             -- 是否免費 (0: 否, 1: 是)
-            class_is_free       NVARCHAR(2)     NULL CONSTRAINT DF_class_is_free DEFAULT ('N'),
-            -- 授課老師 ID (外鍵)
-            class_instructor_id NVARCHAR(50)    NULL,
+            class_is_free       BIT          NOT NULL CONSTRAINT DF_class_is_free DEFAULT(0),
+            -- 預設授課老師 ID
+            class_default_instructor_id NVARCHAR(50)    NULL,
+            -- 預設授課老師 名字
+            class_default_instructor_name NVARCHAR(50)    NULL,
             -- 課程狀態 (0: 下架, 1: 上架)
-            class_is_active     NVARCHAR(2)     NULL CONSTRAINT DF_class_is_active DEFAULT ('Y'),
+            class_is_active     BIT          NOT NULL CONSTRAINT DF_class_is_active DEFAULT (1),
             -- 課程分類
             class_type          NVARCHAR(50)    NULL,
             -- 建立資訊
@@ -545,36 +554,38 @@
             CONSTRAINT PK_class PRIMARY KEY (class_sn),
         );
         
-        -- 請確保 dbo.users 表中已經存在這些 usr_id (例如: T001, T002...)
+        -- 請確保 dbo.users 表中已經存在這些 usr_id
         INSERT INTO dbo.class (
             class_name, 
             class_label_color, 
             class_duration, 
             class_is_free, 
-            class_instructor_id, 
+            class_default_instructor_id,
+            class_default_instructor_name,
             class_is_active, 
             class_type, 
             class_create_pn, 
             class_up_pn
         )
         VALUES 
-        (N'基礎重量訓練', N'#FF5733', 60, 0, N'T001', 1, N'重訓', N'Admin', N'Admin'),
-        (N'極限燃脂拳擊', N'#C70039', 50, 0, N'T002', 1, N'有氧', N'Admin', N'Admin'),
-        (N'舒緩陰瑜珈', N'#DAF7A6', 90, 1, N'T001', 1, N'瑜珈', N'Admin', N'Admin'),
-        (N'核心皮拉提斯', N'#581845', 60, 0, N'T003', 1, N'核心', N'Admin', N'Admin'),
-        (N'進階健體專班', N'#2ECC71', 120, 0, N'T002', 0, N'重訓', N'Admin', N'Admin'); -- 這筆預設為下架狀態
+        (N'基礎重量訓練', N'#FF5733', 60, 0, N'U0000000001', N'管理員1', 1, N'重訓', N'Admin', N'Admin'),
+        (N'極限燃脂拳擊', N'#C70039', 50, 0, N'U0000000002', N'老師小美', 1, N'有氧', N'Admin', N'Admin'),
+        (N'舒緩陰瑜珈', N'#DAF7A6', 90, 1, N'U0000000001', N'管理員1', 1, N'瑜珈', N'Admin', N'Admin'),
+        (N'核心皮拉提斯', N'#581845', 60, 0, N'U0000000003', N'老師小愛', 1, N'核心', N'Admin', N'Admin'),
+        (N'進階健體專班', N'#2ECC71', 120, 0, N'U0000000002', N'老師小美', 0, N'重訓', N'Admin', N'Admin'); -- 這筆預設為下架狀態
         ```
         
     
     | **欄位名稱** | **資料類型** | **說明** | **範例** |
     | --- | --- | --- | --- |
     | **`class_sn`** | PK | 課程流水號 |  |
+    | **`class_id`** | varChar ，唯一 | 課程唯一，避免將流水號直接暴露在api上， | CLS000001 |
     | **`class_name`** | varChar | 課程名稱 |  |
     | **`class_label_color`** | varChar | 課程標籤顏色(對應到前端顏色) |  |
     | **`class_duration`** | int | 上課時長(min) |  |
     | **`class_is_free`** | Boolean | 該堂課是否免費 |  |
-    | **`class_instructor_id`** | Foreign key | 該課程指導老師，關連到 `users` 表 | 不一定要有這個 |
-    | **`class_instructor_name`** | nvarChar | 該課程老師名字，讓刪除老師資料時，不要因為完全依賴`users`表而報錯 |  |
+    | **`class_default_instructor_id`** | Foreign key | 該課程預設指導老師，關連到 `users` 表 | 不一定要有這個 |
+    | **`class_default_instructor_name`** | nvarChar | 該預設課程老師名字，讓刪除老師資料時，不要因為完全依賴`users`表而報錯 |  |
     | **`class_is_active`** | boolean | 該堂課現在是否開課狀態 |  |
     | **`class_type`** | Enum | 課程種類
     目前沒分類，當作未來擴充 |  |
