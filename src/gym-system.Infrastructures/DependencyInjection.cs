@@ -11,6 +11,8 @@ using gym_system.Infrastructures.Queries.Instructors;
 using gym_system.Infrastructures.Queries.Courses;
 using gym_system.Infrastructures.Queries.TicketPlans;
 using Microsoft.Extensions.DependencyInjection;
+using gym_system.Application.ScheduleRulesUseCase.Queries;
+using gym_system.Infrastructures.Queries.ScheduleRules;
 
 namespace gym_system.Infrastructures
 {
@@ -61,6 +63,7 @@ namespace gym_system.Infrastructures
             DapperConfig.Register();
             services.AddScoped<ICourseRepository, SqlCourseRepository>();
             services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
+            services.AddScoped<IScheduleRulesQueryService, DapperGetScheduleRulesQueryService>();
             return services;
         }
     }

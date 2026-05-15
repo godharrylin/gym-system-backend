@@ -5,6 +5,7 @@ using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
 using gym_system.Infrastructures;
 using gym_system.Application.CoursesUseCase.Commands;
+using gym_system.Application.ScheduleRulesUseCase.Queries;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,7 @@ builder.Services.AddScoped<GetInstructorsListHandler>();
 builder.Services.AddScoped<GetCoursesListHandler>();
 builder.Services.AddScoped<UpdateCourseHandler>();
 builder.Services.AddScoped<CreateCourseHandler>();
+builder.Services.AddScoped<GetScheduleRulesQueryHandler>();
 /* Mock Connection */
 //builder.Services.AddScoped<RegisterMemberHandler>();
 //builder.Services.AddInfrastructureInMemory();
