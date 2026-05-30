@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using gym_system.Api.Contracts.ScheduleRules;
+using gym_system.Application.ScheduleRulesUseCase.Commands.CreateScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Queries;
+using System.Threading.Tasks.Dataflow;
 
 namespace gym_system.Api.Controllers
 {
@@ -11,9 +13,12 @@ namespace gym_system.Api.Controllers
     public class ScheduleRuleController: ControllerBase
     {
         private readonly GetScheduleRulesQueryHandler _getScheduleRulesQueryHandler;
-        public ScheduleRuleController(GetScheduleRulesQueryHandler getScheduleRulesQueryHandler) 
+        private readonly CreateScheduleRuleHandler _createScheduleRuleHandler;
+        public ScheduleRuleController(GetScheduleRulesQueryHandler getScheduleRulesQueryHandler,
+            CreateScheduleRuleHandler createScheduleRuleHandler) 
         {
             _getScheduleRulesQueryHandler = getScheduleRulesQueryHandler;
+            _createScheduleRuleHandler = createScheduleRuleHandler;
         }
 
         /// <summary>
@@ -44,5 +49,34 @@ namespace gym_system.Api.Controllers
             };
             return Ok(response);
         }
+
+        /// <summary>
+        /// 新增排課模板
+        /// </summary>
+        /// <param name="request"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        [HttpPost]
+        public async Task<ActionResult<bool>> CreateScheduleRuleAsync([FromBody] CreateScheduleRuleRequest request, CancellationToken ct)
+        {
+            if(!TimeSpan.TryParse(request.StartTime, out TimeSpan parsedStartTime))
+            {
+                // 如果轉換失敗，直接在這裡拋出例外擋掉 (或回傳 400 Bad Request 給前端)
+                throw new ArgumentException("上課時間格式不正確，請輸入如 14:30 的格式", nameof(request.StartTime));
+            }
+            var command = new CreateScheduleRuleCommand
+            {
+                ClassId = request.ClassId,
+                InstructorId = request.InstructorId,
+                DayOfWeek = (System.DayOfWeek)request.DayOfWeek,
+                StartTime = parsedStartTime,
+                Duration = request.duration
+            };
+            var result = await _createScheduleRuleHandler.Handle(command, ct);
+            return result;
+        }
+
+        //[HttpPost]
+
     }
 }

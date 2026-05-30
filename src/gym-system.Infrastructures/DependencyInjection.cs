@@ -60,6 +60,7 @@ namespace gym_system.Infrastructures
             services.AddScoped<ICourseRepository, SqlCourseRepository>();
             services.AddScoped<IInstructorQueryService, DapperGetInstructorsQueryService>();
             services.AddScoped<ISqlSession, SqlSession>();
+            services.AddScoped<IScheduleRuleRepository, SqlScheduleRuleRepository>();
             DapperConfig.Register();
             services.AddScoped<ICourseRepository, SqlCourseRepository>();
             services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
