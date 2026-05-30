@@ -610,7 +610,7 @@
         	  -- 上課時長
         	  cls_scdle_duration				  INT				      NOT NULL, 
         	  -- 結束時間 (由資料庫自動計算：開始時間 + 時長，並實體儲存)
-            cls_scdle_rules_et AS (CAST(DATEADD(MINUTE, cls_scdle_duration, cls_scdle_rules_st) AS TIME)) PERSISTED,
+            cls_scdle_rules_et          TIME            NOT NULL,
         	  -- 結束後的緩衝時間 (分鐘)
         	  cls_scdle_rules_buffer_time		INT				NOT NULL,
             -- 老師 ID 
@@ -623,26 +623,28 @@
         
         -- 新增排課規則範本
         INSERT INTO dbo.cls_scdle_rules (
-            class_id, 
-            cls_scdle_rules_day_wk, 
-            cls_scdle_rules_st, 
-            cls_scdle_duration, 
-            cls_scdle_rules_buffer_time, 
-            cls_scdle_instructor_id, 
+            class_id,
+            cls_scdle_rules_day_wk,
+            cls_scdle_rules_st,
+            cls_scdle_duration,
+            cls_scdle_rules_et,
+            cls_scdle_rules_buffer_time,
+            cls_scdle_instructor_id,
             cls_scdle_rules_is_active
         )
-        VALUES 
+        VALUES
         -- 規則 1：每週一 09:00，基礎重量訓練 (60分鐘)，換場緩衝 15 分鐘
-        ('CLS000001', 1, '09:00:00', 60, 15, 'U0000000001', 1),
+        ('CLS000001', 1, '09:00:00', 60, '10:00:00', 15, 'U000000001', 1),
         
         -- 規則 2：每週三 18:30，極限燃脂拳擊 (50分鐘)，換場緩衝 10 分鐘
-        ('CLS000002', 3, '18:30:00', 50, 10, 'U0000000002', 1),
+        ('CLS000002', 3, '18:30:00', 50, '19:20:00', 10, 'U000000002', 1),
         
         -- 規則 3：每週五 20:00，舒緩陰瑜珈 (90分鐘)，換場緩衝 15 分鐘
-        ('CLS000003', 5, '20:00:00', 90, 15, 'U0000000001', 1),
+        ('CLS000003', 5, '20:00:00', 90, '21:30:00', 15, 'U000000001', 1),
         
         -- 規則 4：每週六 10:00，核心皮拉提斯 (70分鐘，依據圖片)，換場緩衝 10 分鐘
-        ('CLS000004', 6, '10:00:00', 70, 10, 'U0000000003', 1);
+        ('CLS000004', 6, '10:00:00', 70, '11:10:00', 10, 'U000000003', 1);
+        
         ```
         
     
@@ -652,9 +654,8 @@
     | **`class_id`** | varchar(15) | 關聯到 `class`表 | CLS000004 |
     | **`cls_scdle_rules_day_wk`** | Int | 星期幾 (1-7 ) | 1 (週一) |
     | **`cls_scdle_rules_st`** | Time | 開始時間 (不含日期) | 09:00:00 |
-    | **`cls_scdle_rules_duration`** | int | 上課時長(分鐘) |  |
-    | **`cls_scdle_rules_et`** | Time | 結束時間 (不含日期) = 開始時間+上課時長。
-    避免獨立儲存結束時間造成資料不一致問題 |  |
+    | **`cls_scdle_duration`** | int | 上課時長(分鐘) |  |
+    | **`cls_scdle_rules_et`** | Time | 結束時間 (不含日期 |  |
     | **`cls_scdle_rules_buffer_time`** | int | 結束後緩衝時間(分鐘) |  |
     | **`instructor_id`** | varchar(21) | 關連到 `user_role`表，老師 ID | U0000000003 |
     | **`cls_scdle_rules_is_active`** | Boolean | 此規則是否還在執行，用來Soft delete | true |
