@@ -66,7 +66,8 @@ namespace gym_system.Infrastructures
         {
             const string sql = """
                 SELECT TOP 1
-                    class_id AS class_id,
+                    cls_scdle_rules_sn,
+                    class_id,
                     cls_scdle_rules_day_wk,
                     cls_scdle_rules_st,
                     cls_scdle_duration,
@@ -99,6 +100,7 @@ namespace gym_system.Infrastructures
             if (row is null) return null;
 
             return ScheduleRule.Rehydrate(
+                row.cls_scdle_rules_sn,
                 row.class_id,
                 (System.DayOfWeek)row.cls_scdle_rules_day_wk,
                 row.cls_scdle_rules_st,
@@ -111,6 +113,7 @@ namespace gym_system.Infrastructures
 
         private sealed record ScheduleRuleRow
         {
+            public required string cls_scdle_rules_sn { get; set; }
             public string class_id { get; set; } = string.Empty;
             public int cls_scdle_rules_day_wk { get; set; }
             public TimeSpan cls_scdle_rules_st { get; set; }
