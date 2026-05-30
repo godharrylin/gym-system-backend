@@ -1,8 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
 using gym_system.Api.Contracts.ScheduleRules;
 using gym_system.Application.ScheduleRulesUseCase.Commands.CreateScheduleRule;
+using gym_system.Application.ScheduleRulesUseCase.Commands.UpdateScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Queries;
-using System.Threading.Tasks.Dataflow;
+using Microsoft.AspNetCore.Mvc;
 
 namespace gym_system.Api.Controllers
 {
@@ -10,24 +10,26 @@ namespace gym_system.Api.Controllers
 
     [ApiController]
     [Route("api/v1/schedule-rules")]
-    public class ScheduleRuleController: ControllerBase
+    public class ScheduleRuleController : ControllerBase
     {
         private readonly GetScheduleRulesQueryHandler _getScheduleRulesQueryHandler;
         private readonly CreateScheduleRuleHandler _createScheduleRuleHandler;
-        public ScheduleRuleController(GetScheduleRulesQueryHandler getScheduleRulesQueryHandler,
-            CreateScheduleRuleHandler createScheduleRuleHandler) 
+        private readonly UpdateScheduleRuleHandler _updateScheduleRuleHandler;
+
+        public ScheduleRuleController(
+            GetScheduleRulesQueryHandler getScheduleRulesQueryHandler,
+            CreateScheduleRuleHandler createScheduleRuleHandler,
+            UpdateScheduleRuleHandler updateScheduleRuleHandler)
         {
             _getScheduleRulesQueryHandler = getScheduleRulesQueryHandler;
             _createScheduleRuleHandler = createScheduleRuleHandler;
+            _updateScheduleRuleHandler = updateScheduleRuleHandler;
         }
 
         /// <summary>
         /// 取得排課模板列表
         /// </summary>
         /// <remarks> 純粹顯示現有模板課程到UI </remarks>
-        /// <param name="request"></param>
-        /// <param name="ct"></param>
-        /// <returns></returns>
         [HttpGet]
         public async Task<ActionResult<GetScheduleRulesQueryResponse>> GetScheduleRulesQueryAsync(CancellationToken ct)
         {
@@ -53,15 +55,11 @@ namespace gym_system.Api.Controllers
         /// <summary>
         /// 新增排課模板
         /// </summary>
-        /// <param name="request"></param>
-        /// <param name="ct"></param>
-        /// <returns></returns>
         [HttpPost]
         public async Task<ActionResult<bool>> CreateScheduleRuleAsync([FromBody] CreateScheduleRuleRequest request, CancellationToken ct)
         {
-            if(!TimeSpan.TryParse(request.StartTime, out TimeSpan parsedStartTime))
+            if (!TimeSpan.TryParse(request.StartTime, out TimeSpan parsedStartTime))
             {
-                // 如果轉換失敗，直接在這裡拋出例外擋掉 (或回傳 400 Bad Request 給前端)
                 throw new ArgumentException("上課時間格式不正確，請輸入如 14:30 的格式", nameof(request.StartTime));
             }
             var command = new CreateScheduleRuleCommand
@@ -76,7 +74,35 @@ namespace gym_system.Api.Controllers
             return result;
         }
 
-        //[HttpPost]
+        /// <summary>
+        /// 更新排課模板
+        /// </summary>
+        [HttpPost("{ruleSn}")]
+        public async Task<ActionResult<bool>> UpdateScheduleRuleAsync([FromRoute] string ruleSn, [FromBody] UpdateScheduleRuleRequest request, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(ruleSn))
+            {
+                throw new ArgumentException($"ruleSn 格式錯誤，不能為null 或空字串");
+            }
 
+            if (!TimeSpan.TryParse(request.StartTime, out TimeSpan parsedStartTime))
+            {
+                throw new ArgumentException("上課時間格式不正確，請輸入如 14:30 的格式", nameof(request.StartTime));
+            }
+
+            var command = new UpdateScheduleRuleCommand
+            {
+                RuleSn = ruleSn,
+                ClassId = request.ClassId,
+                InstructorId = request.InstructorId,
+                DayOfWeek = (System.DayOfWeek)request.DayOfWeek,
+                StartTime = parsedStartTime,
+                Duration = request.Duration,
+                IsActive = request.IsActive
+            };
+
+            var result = await _updateScheduleRuleHandler.Handle(command, ct);
+            return result;
+        }
     }
 }

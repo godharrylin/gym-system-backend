@@ -39,13 +39,13 @@ namespace gym_system.Application.ScheduleRulesUseCase.Commands.CreateScheduleRul
             try
             {
                 //      2) 檢查DayOfWork 是否小於 0，放到Schedule Rule entity 處理
-                var newScheduleRule = ScheduleRule.Create(command.ClassId, command.DayOfWeek, command.StartTime, course.Duration, command.InstructorId);
+                var newScheduleRule = ScheduleRule.Create(command.ClassId, command.DayOfWeek, command.StartTime, command.Duration, command.InstructorId);
 
                 //      3) 檢查時間是否有和原本的schedule template衝堂
                 var ConfilcSchedule = await _scheduleRuleRepository.GetOverlappingSchedulesRuleAsync(newScheduleRule, ct);
                 if (ConfilcSchedule is not null)
                 {
-                    throw new InvalidOperationException($"該排課已和排課{ConfilcSchedule.ClassId}衝堂");
+                    throw new InvalidOperationException($"該排課已和排課{ConfilcSchedule.Sn}衝堂");
                 }
 
                 //  2. 新增該筆schedule template
