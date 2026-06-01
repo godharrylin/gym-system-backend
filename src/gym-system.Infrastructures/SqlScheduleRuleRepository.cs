@@ -134,6 +134,23 @@ namespace gym_system.Infrastructures
             return affected > 0;
         }
 
+        public async Task<bool> DeleteAsync(string ruleSn, CancellationToken ct)
+        {
+            const string sql = """
+                DELETE FROM dbo.cls_scdle_rules
+                WHERE cls_scdle_rules_sn = @RuleSn;
+                """;
+
+            var cmd = new CommandDefinition(
+                sql,
+                new { RuleSn = ruleSn },
+                transaction: _session.Transaction,
+                cancellationToken: ct);
+
+            var affected = await _session.Connection.ExecuteAsync(cmd);
+            return affected > 0;
+        }
+
         /// <summary>
         /// 找上課時段部分重疊的排課
         /// </summary>

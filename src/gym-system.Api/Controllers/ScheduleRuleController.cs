@@ -1,5 +1,6 @@
 using gym_system.Api.Contracts.ScheduleRules;
 using gym_system.Application.ScheduleRulesUseCase.Commands.CreateScheduleRule;
+using gym_system.Application.ScheduleRulesUseCase.Commands.DeleteScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Commands.UpdateScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Queries;
 using Microsoft.AspNetCore.Mvc;
@@ -15,15 +16,18 @@ namespace gym_system.Api.Controllers
         private readonly GetScheduleRulesQueryHandler _getScheduleRulesQueryHandler;
         private readonly CreateScheduleRuleHandler _createScheduleRuleHandler;
         private readonly UpdateScheduleRuleHandler _updateScheduleRuleHandler;
+        private readonly DeleteScheduleRuleHandler _deleteScheduleRuleHandler;
 
         public ScheduleRuleController(
             GetScheduleRulesQueryHandler getScheduleRulesQueryHandler,
             CreateScheduleRuleHandler createScheduleRuleHandler,
-            UpdateScheduleRuleHandler updateScheduleRuleHandler)
+            UpdateScheduleRuleHandler updateScheduleRuleHandler,
+            DeleteScheduleRuleHandler deleteScheduleRuleHandler)
         {
             _getScheduleRulesQueryHandler = getScheduleRulesQueryHandler;
             _createScheduleRuleHandler = createScheduleRuleHandler;
             _updateScheduleRuleHandler = updateScheduleRuleHandler;
+            _deleteScheduleRuleHandler = deleteScheduleRuleHandler;
         }
 
         /// <summary>
@@ -102,6 +106,23 @@ namespace gym_system.Api.Controllers
             };
 
             var result = await _updateScheduleRuleHandler.Handle(command, ct);
+            return result;
+        }
+
+        [HttpPost("{ruleSn}/delete")]
+        public async Task<ActionResult<bool>> DeleteScheduleRuleAsync([FromRoute] string ruleSn, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(ruleSn))
+            {
+                throw new ArgumentException("ruleSn 格式錯誤，不能為 null 或空字串", nameof(ruleSn));
+            }
+
+            var command = new DeleteScheduleRuleCommand
+            {
+                RuleSn = ruleSn
+            };
+
+            var result = await _deleteScheduleRuleHandler.Handle(command, ct);
             return result;
         }
     }

@@ -11,5 +11,6 @@ namespace gym_system.Domain.Repositories
         public Task<ScheduleRule?> GetOverlappingSchedulesRuleAsync(ScheduleRule newScheduleRule, CancellationToken ct, string? excludeRuleSn = null);
         public Task<bool> AddAsync(ScheduleRule newScheduleRule, CancellationToken ct);
         public Task<bool> UpdateAsync(ScheduleRule scheduleRule, CancellationToken ct);
+        public Task<bool> DeleteAsync(string ruleSn, CancellationToken ct);
     }
 }

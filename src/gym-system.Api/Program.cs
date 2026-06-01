@@ -5,6 +5,7 @@ using gym_system.Application.InstructorsUseCase.Command.UpdateInstructor;
 using gym_system.Application.InstructorsUseCase.Queries;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
 using gym_system.Application.ScheduleRulesUseCase.Commands.CreateScheduleRule;
+using gym_system.Application.ScheduleRulesUseCase.Commands.DeleteScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Commands.UpdateScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Queries;
 using gym_system.Infrastructures;
@@ -25,6 +26,7 @@ builder.Services.AddScoped<CreateCourseHandler>();
 builder.Services.AddScoped<GetScheduleRulesQueryHandler>();
 builder.Services.AddScoped<CreateScheduleRuleHandler>();
 builder.Services.AddScoped<UpdateScheduleRuleHandler>();
+builder.Services.AddScoped<DeleteScheduleRuleHandler>();
 /* Mock Connection */
 //builder.Services.AddScoped<RegisterMemberHandler>();
 //builder.Services.AddInfrastructureInMemory();
