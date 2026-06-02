@@ -6,7 +6,7 @@ namespace gym_system.Domain.Entities.ScheduleRules
         /// <summary>
         ///  schedule rule sn
         /// </summary>
-        public string Sn { get; set; } = string.Empty;
+        public string RuleSn { get; set; } = string.Empty;
         public string ClassId { get; private set; } = string.Empty;
         public System.DayOfWeek DayOfWeek { get; private set; }
         public TimeSpan StartTime { get; private set; }
@@ -16,10 +16,10 @@ namespace gym_system.Domain.Entities.ScheduleRules
         public string InstructorId { get; private set; } = string.Empty;
         public bool IsActive { get; private set; }
 
-        private ScheduleRule( string sn , string classId, System.DayOfWeek dayOfweek, TimeSpan startTime,
+        private ScheduleRule( string ruleSn , string classId, System.DayOfWeek dayOfweek, TimeSpan startTime,
                     int duration , TimeSpan endTime, int bufferTime ,string instructorId, bool isActive)
         {
-            Sn = sn;
+            RuleSn = ruleSn;
             ClassId = classId;
             DayOfWeek = dayOfweek;
             StartTime = startTime;
@@ -61,7 +61,7 @@ namespace gym_system.Domain.Entities.ScheduleRules
         }
 
         public static ScheduleRule Rehydrate(
-            string sn,
+            string ruleSn,
             string classId,
             System.DayOfWeek dayOfWeek,
             TimeSpan startTime,
@@ -83,7 +83,7 @@ namespace gym_system.Domain.Entities.ScheduleRules
 
             CheckValidity(dayOfWeek, duration);
             return new ScheduleRule(
-                sn,
+                ruleSn,
                 classId.Trim(),
                 dayOfWeek,
                 startTime,

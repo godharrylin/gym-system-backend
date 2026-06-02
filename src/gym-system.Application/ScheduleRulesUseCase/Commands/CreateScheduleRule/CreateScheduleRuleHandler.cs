@@ -45,7 +45,7 @@ namespace gym_system.Application.ScheduleRulesUseCase.Commands.CreateScheduleRul
                 var ConfilcSchedule = await _scheduleRuleRepository.GetOverlappingSchedulesRuleAsync(newScheduleRule, ct);
                 if (ConfilcSchedule is not null)
                 {
-                    throw new InvalidOperationException($"該排課已和排課{ConfilcSchedule.Sn}衝堂");
+                    throw new InvalidOperationException($"該排課已和排課{ConfilcSchedule.RuleSn}衝堂");
                 }
 
                 //  2. 新增該筆schedule template

@@ -8,6 +8,7 @@ using gym_system.Application.ScheduleRulesUseCase.Commands.CreateScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Commands.DeleteScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Commands.UpdateScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Queries;
+using gym_system.Application.ScheduleSessionsUseCase.GetOrEnsureScheduleWeek;
 using gym_system.Infrastructures;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,6 +28,7 @@ builder.Services.AddScoped<GetScheduleRulesQueryHandler>();
 builder.Services.AddScoped<CreateScheduleRuleHandler>();
 builder.Services.AddScoped<UpdateScheduleRuleHandler>();
 builder.Services.AddScoped<DeleteScheduleRuleHandler>();
+builder.Services.AddScoped<GetOrEnsureScheduleWeekHandler>();
 /* Mock Connection */
 //builder.Services.AddScoped<RegisterMemberHandler>();
 //builder.Services.AddInfrastructureInMemory();

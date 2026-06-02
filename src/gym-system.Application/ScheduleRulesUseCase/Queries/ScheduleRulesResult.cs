@@ -7,7 +7,7 @@ namespace gym_system.Application.ScheduleRulesUseCase.Queries
 {
     public class ScheduleRulesResult
     {
-        public int cls_scdle_rules_sn { get; set; }
+        public string cls_scdle_rules_sn { get; set; } = string.Empty;
         public required string class_id { get; set; }
         public int cls_scdle_rules_day_wk { get; set; }
         public TimeSpan cls_scdle_rules_st { get; set; }
