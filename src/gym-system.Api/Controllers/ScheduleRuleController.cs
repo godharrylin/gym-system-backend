@@ -109,6 +109,13 @@ namespace gym_system.Api.Controllers
             return result;
         }
 
+        /// <summary>
+        /// 刪除排課模板
+        /// </summary>
+        /// <param name="ruleSn"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         [HttpPost("{ruleSn}/delete")]
         public async Task<ActionResult<bool>> DeleteScheduleRuleAsync([FromRoute] string ruleSn, CancellationToken ct)
         {
