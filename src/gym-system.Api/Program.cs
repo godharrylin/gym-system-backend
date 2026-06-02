@@ -1,10 +1,14 @@
+using gym_system.Application.CoursesUseCase.Commands;
+using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.InstructorsUseCase.Command.CreateInstructor;
 using gym_system.Application.InstructorsUseCase.Command.UpdateInstructor;
 using gym_system.Application.InstructorsUseCase.Queries;
-using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
+using gym_system.Application.ScheduleRulesUseCase.Commands.CreateScheduleRule;
+using gym_system.Application.ScheduleRulesUseCase.Commands.DeleteScheduleRule;
+using gym_system.Application.ScheduleRulesUseCase.Commands.UpdateScheduleRule;
+using gym_system.Application.ScheduleRulesUseCase.Queries;
 using gym_system.Infrastructures;
-using gym_system.Application.CoursesUseCase.Commands;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +23,10 @@ builder.Services.AddScoped<GetInstructorsListHandler>();
 builder.Services.AddScoped<GetCoursesListHandler>();
 builder.Services.AddScoped<UpdateCourseHandler>();
 builder.Services.AddScoped<CreateCourseHandler>();
+builder.Services.AddScoped<GetScheduleRulesQueryHandler>();
+builder.Services.AddScoped<CreateScheduleRuleHandler>();
+builder.Services.AddScoped<UpdateScheduleRuleHandler>();
+builder.Services.AddScoped<DeleteScheduleRuleHandler>();
 /* Mock Connection */
 //builder.Services.AddScoped<RegisterMemberHandler>();
 //builder.Services.AddInfrastructureInMemory();
