@@ -49,9 +49,16 @@ namespace gym_system.Domain.Entities.ScheduleSessions
         public string RuleSn { get; }
         public bool IsFree { get; }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="template">模板課</param>
+        /// <param name="weekStart">星期一的日期</param>
+        /// <remarks>weekStart 一定要是星期一</remarks>
+        /// <returns></returns>
         public static ScheduleSession CreateAutoFromTemplate(ScheduleSessionTemplate template, DateOnly weekStart)
         {
-            if (!Enum.IsDefined(typeof(DayOfWeek), template.DayOfWeek))
+            if (!Enum.IsDefined(template.DayOfWeek))
             {
                 throw new InvalidOperationException("排課模板星期格式不正確");
             }

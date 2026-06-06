@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace gym_system.Api.Controllers
 {
+    /// <summary>
+    /// 撈取當週實際課程表，如果該週沒有排課則會從模板課程先排課
+    /// </summary>
     [ApiController]
     [Route("api/v1/admin/schedule")]
     public sealed class ScheduleWeekController : ControllerBase
