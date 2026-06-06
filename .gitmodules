@@ -1,0 +1,3 @@
+[submodule "doc"]
+	path = doc
+	url = https://github.com/godharrylin/gym-system_doc_and_spec.git
