@@ -28,7 +28,9 @@ namespace gym_system.Application.ScheduleSessionsUseCase.GetOrEnsureScheduleWeek
                 if (existingSessions.Count > 0)
                 {
                     await _unitOfWork.CommitAsync(ct);
-                    return BuildResult(weekStart, weekEnd, "REAL", false, existingSessions);
+                    //  拿沒有被取消的課程
+                    var notCancelSession = existingSessions.Where(session => session.Status != SessionStatus.Cancel).ToList();
+                    return BuildResult(weekStart, weekEnd, "REAL", false, notCancelSession);
                 }
 
                 var templates = await _scheduleSessionRepository.GetActiveTemplatesAsync(ct);
