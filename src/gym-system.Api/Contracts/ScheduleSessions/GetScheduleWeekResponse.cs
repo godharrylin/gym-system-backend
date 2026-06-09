@@ -1,4 +1,4 @@
-namespace gym_system.Api.Contracts.ScheduleWeeks
+namespace gym_system.Api.Contracts.ScheduleSessions
 {
     public sealed class GetScheduleWeekResponse
     {
@@ -6,10 +6,10 @@ namespace gym_system.Api.Contracts.ScheduleWeeks
         public required string WeekEnd { get; set; }
         public required string Source { get; set; }
         public bool Created { get; set; }
-        public IReadOnlyList<ScheduleWeekSessionDto> Sessions { get; set; } = [];
+        public IReadOnlyList<ScheduleSessionDto> Sessions { get; set; } = [];
     }
 
-    public sealed class ScheduleWeekSessionDto
+    public sealed class ScheduleSessionDto
     {
         public required string SessionId { get; set; }
         public string? ScheduleId { get; set; }

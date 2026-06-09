@@ -29,6 +29,7 @@ namespace gym_system.Infrastructures
                     a.cls_scdle_arnge_st,
                     a.cls_scdle_arnge_et,
                     a.cls_scdle_status,
+                    a.cls_scdle_arnge_is_free,
                     a.cls_scdle_source,
                     a.cls_scdle_rules_sn,
                     CAST(ISNULL(c.class_is_free, 0) AS bit) AS class_is_free
@@ -97,6 +98,7 @@ namespace gym_system.Infrastructures
                     cls_scdle_arnge_st,
                     cls_scdle_arnge_et,
                     cls_scdle_status,
+                    cls_scdle_arnge_is_free,
                     cls_scdle_source,
                     cls_scdle_rules_sn
                 )
@@ -110,6 +112,7 @@ namespace gym_system.Infrastructures
                     @StartAt,
                     @EndAt,
                     @Status,
+                    @IsFree,
                     @Source,
                     @RuleSn
                 WHERE NOT EXISTS (
@@ -129,12 +132,13 @@ namespace gym_system.Infrastructures
                         Date = session.Date.ToDateTime(TimeOnly.MinValue),
                         session.ClassId,
                         session.ClassName,
-                        ClassLabelColor = session.ClassLabelColor,
-                        InstructorId = session.InstructorId,
+                        session.ClassLabelColor,
+                        session.InstructorId,
                         session.InstructorName,
-                        StartAt = session.StartAt,
-                        EndAt = session.EndAt,
-                        session.Status,
+                        session.StartAt,
+                        session.EndAt,
+                        Status = session.Status.ToString(),
+                        session.IsFree,
                         session.Source,
                         session.RuleSn
                     },
@@ -158,10 +162,10 @@ namespace gym_system.Infrastructures
                 instructorName: row.instructor_name,
                 startAt: row.cls_scdle_arnge_st,
                 endAt: row.cls_scdle_arnge_et,
-                status: row.cls_scdle_status,
+                status: ToSessionStatus(row.cls_scdle_status),
                 source: row.cls_scdle_source,
                 ruleSn: row.cls_scdle_rules_sn,
-                isFree: row.class_is_free);
+                isFree: row.cls_scdle_arnge_is_free);
         }
 
         private static ScheduleSessionTemplate ToTemplate(ScheduleSessionTemplateRow row)
@@ -192,6 +196,7 @@ namespace gym_system.Infrastructures
             public DateTime cls_scdle_arnge_st { get; set; }
             public DateTime cls_scdle_arnge_et { get; set; }
             public string cls_scdle_status { get; set; } = string.Empty;
+            public bool cls_scdle_arnge_is_free { get; set; }
             public string cls_scdle_source { get; set; } = string.Empty;
             public string cls_scdle_rules_sn { get; set; } = string.Empty;
             public bool class_is_free { get; set; }
@@ -209,6 +214,19 @@ namespace gym_system.Infrastructures
             public TimeSpan cls_scdle_rules_et { get; set; }
             public string cls_scdle_instructor_id { get; set; } = string.Empty;
             public string instructor_name { get; set; } = string.Empty;
+            public string cls_scdle_status {  get; set; } = string.Empty;
+        }
+
+        private static SessionStatus ToSessionStatus(string status)
+        {
+            return status switch
+            {
+                "Open" => SessionStatus.Open,
+                "Cancel" => SessionStatus.Cancel,
+                "Ongoing" => SessionStatus.Ongoing,
+                "Finished" => SessionStatus.Finished,
+                _ => throw new InvalidOperationException($"未知狀態: {status}")
+            };
         }
     }
 }

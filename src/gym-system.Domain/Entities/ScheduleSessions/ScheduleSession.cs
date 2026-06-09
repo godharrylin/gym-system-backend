@@ -13,7 +13,7 @@ namespace gym_system.Domain.Entities.ScheduleSessions
             string instructorName,
             DateTime startAt,
             DateTime endAt,
-            string status,
+            SessionStatus status,
             string source,
             string ruleSn,
             bool isFree)
@@ -44,7 +44,7 @@ namespace gym_system.Domain.Entities.ScheduleSessions
         public string InstructorName { get; }
         public DateTime StartAt { get; }
         public DateTime EndAt { get; }
-        public string Status { get; }
+        public SessionStatus Status { get; }
         public string Source { get; }
         public string RuleSn { get; }
         public bool IsFree { get; }
@@ -84,7 +84,7 @@ namespace gym_system.Domain.Entities.ScheduleSessions
                 instructorName: template.InstructorName,
                 startAt: startAt,
                 endAt: endAt,
-                status: "Open",
+                status: SessionStatus.Open, //  模板課程建立的預設為 Open
                 source: "Auto",
                 ruleSn: template.RuleSn,
                 isFree: template.IsFree);
@@ -101,7 +101,7 @@ namespace gym_system.Domain.Entities.ScheduleSessions
             string instructorName,
             DateTime startAt,
             DateTime endAt,
-            string status,
+            SessionStatus status,
             string source,
             string ruleSn,
             bool isFree)
@@ -123,4 +123,13 @@ namespace gym_system.Domain.Entities.ScheduleSessions
                 isFree);
         }
     }
+
+    public enum SessionStatus
+    {
+        Open,
+        Cancel,
+        Finished,
+        Ongoing
+    }
+    
 }

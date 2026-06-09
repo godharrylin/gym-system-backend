@@ -93,7 +93,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.GetOrEnsureScheduleWeek
                 Duration = (int)(session.EndAt - session.StartAt).TotalMinutes,
                 Color = session.ClassLabelColor,
                 IsFree = session.IsFree,
-                Status = session.Status,
+                Status = session.Status.ToString(),
                 Source = session.Source,
                 RuleSn = session.RuleSn
             };
