@@ -1,4 +1,4 @@
-namespace gym_system.Application.ScheduleSessionsUseCase.GetOrEnsureScheduleWeek
+namespace gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureScheduleWeek
 {
     public sealed class GetOrEnsureScheduleWeekResult
     {

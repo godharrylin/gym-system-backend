@@ -8,6 +8,7 @@ namespace gym_system.Infrastructures
     internal sealed class SqlScheduleSessionRepository : IScheduleSessionRepository
     {
         private readonly ISqlSession _session;
+        private readonly int BUFFER_TIME = 10;
 
         public SqlScheduleSessionRepository(ISqlSession session)
         {
@@ -149,6 +150,124 @@ namespace gym_system.Infrastructures
             }
         }
 
+        public async Task<ScheduleSession?> GetByIdAsync(string sessionId, CancellationToken ct)
+        {
+            const string sql = """
+                SELECT TOP 1
+                    cls_scdle_arnge_sn,
+                    cls_scdle_date,
+                    cls_scdle_arnge_id,
+                    class_id,
+                    class_name,
+                    class_label_color,
+                    cls_scdle_arnge_instructor_id,
+                    instructor_name,
+                    cls_scdle_arnge_st,
+                    cls_scdle_arnge_et,
+                    cls_scdle_status,
+                    cls_scdle_arnge_is_free,
+                    cls_scdle_source,
+                    cls_scdle_rules_sn
+                FROM dbo.cls_scdle_arnge
+                WHERE cls_scdle_arnge_id = @SessionId
+                   OR cls_scdle_arnge_sn = TRY_CONVERT(INT, @SessionId);
+            """;
+
+            var cmd = new CommandDefinition(
+                sql,
+                new { SessionId = sessionId },
+                transaction: _session.Transaction,
+                cancellationToken: ct);
+
+            var row = await _session.Connection.QueryFirstOrDefaultAsync<ScheduleSessionRow>(cmd);
+            return row is null ? null : ToSession(row);
+        }
+
+        public async Task<ScheduleSession?> GetOverlappingSchedulesSessionAsync(
+            ScheduleSession editScheduleSession,
+            CancellationToken ct)
+        {
+            const string sql = """
+                SELECT TOP 1
+                    cls_scdle_arnge_sn,
+                    cls_scdle_arnge_id,
+                    cls_scdle_date,
+                    class_id,
+                    class_name,
+                    class_label_color,
+                    cls_scdle_arnge_instructor_id,
+                    instructor_name,
+                    cls_scdle_arnge_st,
+                    cls_scdle_arnge_et,
+                    cls_scdle_status,
+                    cls_scdle_arnge_is_free,
+                    cls_scdle_source,
+                    cls_scdle_rules_sn
+                FROM dbo.cls_scdle_arnge
+                WHERE cls_scdle_arnge_sn <> @ArrangeSn
+                  AND ISNULL(cls_scdle_status, 'Cancel') <> 'Cancel'
+                  AND @StartAt < DATEADD(MINUTE, @BUFFER_TIME, cls_scdle_arnge_et)
+                  AND cls_scdle_arnge_st < DATEADD(MINUTE, @BUFFER_TIME, @EndAt)
+                ORDER BY cls_scdle_arnge_st;
+                """;
+
+            var cmd = new CommandDefinition(
+                sql,
+                new
+                {
+                    editScheduleSession.ArrangeSn,
+                    editScheduleSession.StartAt,
+                    editScheduleSession.EndAt,
+                    BUFFER_TIME
+                },
+                transaction: _session.Transaction,
+                cancellationToken: ct);
+
+            var row = await _session.Connection.QueryFirstOrDefaultAsync<ScheduleSessionRow>(cmd);
+            return row is null ? null : ToSession(row);
+        }
+
+        public async Task<bool> UpdateAsync(ScheduleSession scheduleSession, CancellationToken ct)
+        {
+            const string sql = """
+                UPDATE dbo.cls_scdle_arnge
+                SET cls_scdle_date = @Date,
+                    class_id = @ClassId,
+                    class_name = @ClassName,
+                    class_label_color = @ClassLabelColor,
+                    cls_scdle_arnge_instructor_id = @InstructorId,
+                    instructor_name = @InstructorName,
+                    cls_scdle_arnge_st = @StartAt,
+                    cls_scdle_arnge_et = @EndAt,
+                    cls_scdle_status = @Status,
+                    cls_scdle_arnge_is_free = @IsFree,
+                    cls_scdle_arnge_up_dt = @UpdateTime
+                WHERE cls_scdle_arnge_sn = @ArrangeSn;
+                """;
+
+            var cmd = new CommandDefinition(
+                sql,
+                new
+                {
+                    scheduleSession.ArrangeSn,
+                    Date = scheduleSession.Date.ToDateTime(TimeOnly.MinValue),
+                    scheduleSession.ClassId,
+                    scheduleSession.ClassName,
+                    scheduleSession.ClassLabelColor,
+                    scheduleSession.InstructorId,
+                    scheduleSession.InstructorName,
+                    scheduleSession.StartAt,
+                    scheduleSession.EndAt,
+                    Status = scheduleSession.Status.ToString(),
+                    scheduleSession.IsFree,
+                    scheduleSession.UpdateTime
+                },
+                transaction: _session.Transaction,
+                cancellationToken: ct);
+
+            return await _session.Connection.ExecuteAsync(cmd) > 0;
+        }
+
         private static ScheduleSession ToSession(ScheduleSessionRow row)
         {
             return ScheduleSession.Rehydrate(
@@ -199,7 +318,7 @@ namespace gym_system.Infrastructures
             public bool cls_scdle_arnge_is_free { get; set; }
             public string cls_scdle_source { get; set; } = string.Empty;
             public string cls_scdle_rules_sn { get; set; } = string.Empty;
-            public bool class_is_free { get; set; }
+            public DateTime cls_scdle_arnge_up_dt { get; set; }
         }
 
         private sealed record ScheduleSessionTemplateRow

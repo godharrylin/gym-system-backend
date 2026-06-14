@@ -1,7 +1,9 @@
-using System.Globalization;
+using gym_system.Api.Contracts.ScheduleRules;
 using gym_system.Api.Contracts.ScheduleSessions;
-using gym_system.Application.ScheduleSessionsUseCase.GetOrEnsureScheduleWeek;
+using gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureScheduleWeek;
+using gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleSession;
 using Microsoft.AspNetCore.Mvc;
+using System.Globalization;
 
 namespace gym_system.Api.Controllers
 {
@@ -10,16 +12,38 @@ namespace gym_system.Api.Controllers
     public sealed class ScheduleSessionController : ControllerBase
     {
         private readonly GetOrEnsureScheduleWeekHandler _getOrEnsureScheduleWeekHandler;
+        private readonly UpdateScheduleSessionHandler _updateScheduleSessionHandler;
 
-        public ScheduleSessionController(GetOrEnsureScheduleWeekHandler getOrEnsureScheduleWeekHandler)
+        public ScheduleSessionController(GetOrEnsureScheduleWeekHandler getOrEnsureScheduleWeekHandler,
+                                         UpdateScheduleSessionHandler updateScheduleSessionHandler)
         {
             _getOrEnsureScheduleWeekHandler = getOrEnsureScheduleWeekHandler;
+            _updateScheduleSessionHandler = updateScheduleSessionHandler;
         }
 
 
-
-        [HttpPost("")]
-
+        /// <summary>
+        /// 更新某筆已存在的排課實例，partial update
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="req"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        [HttpPost("{id}")]
+        public async Task<ActionResult<bool>> UpdateScheduleAsync([FromRoute] string id, [FromBody] ScheduleSessionRequest req, CancellationToken ct)
+        {
+            var cmd = new UpdateScheduleSessionCommand
+            {
+                SessionId = id.Trim(),
+                Date = req.date?.Trim(),
+                ClassId = req.classId?.Trim(),
+                InstructorId = req.instructorId?.Trim(),
+                StartTime = req.startTime,
+                Status = req.status,
+                IsFree = req.isFree
+            };
+            return Ok(await _updateScheduleSessionHandler.Handle(cmd, ct));
+        }
         //}
         /// <summary>
         /// 撈取當週沒有被取消的實際課程表，如果該週沒有排課則會從模板課程先排課
