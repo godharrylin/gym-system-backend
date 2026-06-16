@@ -181,6 +181,18 @@ namespace gym_system.Domain.Entities.ScheduleSessions
             UpdateTime = updateTime;
         }
 
+        public void Cancel(DateTime updateTime)
+        {
+            if (Status == SessionStatus.Cancel)
+                return;
+
+            if (Status == SessionStatus.Finished)
+                throw new InvalidOperationException("已結束課程不可取消");
+
+            Status = SessionStatus.Cancel;
+            UpdateTime = updateTime;
+        }
+
         private static void ValidateClassInfo(string classId, string className)
         {
             if (string.IsNullOrWhiteSpace(classId))

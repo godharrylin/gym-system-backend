@@ -1,5 +1,6 @@
 using gym_system.Api.Contracts.ScheduleRules;
 using gym_system.Api.Contracts.ScheduleSessions;
+using gym_system.Application.ScheduleSessionsUseCase.Command.CancelScheduleSession;
 using gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleSession;
 using gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureScheduleWeek;
 using gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleSession;
@@ -15,14 +16,17 @@ namespace gym_system.Api.Controllers
         private readonly GetOrEnsureScheduleWeekHandler _getOrEnsureScheduleWeekHandler;
         private readonly CreateScheduleSessionHandler _createScheduleSessionHandler;
         private readonly UpdateScheduleSessionHandler _updateScheduleSessionHandler;
+        private readonly CancelScheduleSessionHandler _cancelScheduleSessionHandler;
 
         public ScheduleSessionController(GetOrEnsureScheduleWeekHandler getOrEnsureScheduleWeekHandler,
-                                        CreateScheduleSessionHandler createScheduleSessionHandler, 
-                                        UpdateScheduleSessionHandler updateScheduleSessionHandler)
+                                        CreateScheduleSessionHandler createScheduleSessionHandler,
+                                        UpdateScheduleSessionHandler updateScheduleSessionHandler,
+                                        CancelScheduleSessionHandler cancelScheduleSessionHandler)
         {
             _getOrEnsureScheduleWeekHandler = getOrEnsureScheduleWeekHandler;
             _createScheduleSessionHandler = createScheduleSessionHandler;
             _updateScheduleSessionHandler = updateScheduleSessionHandler;
+            _cancelScheduleSessionHandler = cancelScheduleSessionHandler;
         }
 
 
@@ -60,6 +64,23 @@ namespace gym_system.Api.Controllers
                 IsFree = req.isFree
             };
             return Ok(await _updateScheduleSessionHandler.Handle(cmd, ct));
+        }
+
+        /// <summary>
+        /// 取消特定課程實例
+        /// </summary>
+        /// <param name="arrangeId"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        [HttpPost("{arrangeId}/cancel")]
+        public async Task<ActionResult<bool>> CancelScheduleAsync([FromRoute] string arrangeId, CancellationToken ct)
+        {
+            var cmd = new CancelScheduleSessionCommand
+            {
+                ArrangeId = arrangeId
+            };
+
+            return Ok(await _cancelScheduleSessionHandler.Handle(cmd, ct));
         }
 
         /// <summary>
