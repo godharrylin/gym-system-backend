@@ -7,6 +7,7 @@ namespace gym_system.Domain.Repositories
     {
         Task<IReadOnlyList<ScheduleSession>> GetByWeekAsync(DateOnly weekStart, DateOnly weekEnd, CancellationToken ct);
         Task<IReadOnlyList<ScheduleSessionTemplate>> GetActiveTemplatesAsync(CancellationToken ct);
+        Task<bool> AddAsync(ScheduleSession newSession,  CancellationToken ct);
         Task AddRangeAsync(IReadOnlyList<ScheduleSession> sessions, CancellationToken ct);
         Task<ScheduleSession?> GetOverlappingSchedulesSessionAsync(ScheduleSession editScheduleSession, CancellationToken ct);
         Task<ScheduleSession?> GetByIdAsync(string sessionSn, CancellationToken ct);

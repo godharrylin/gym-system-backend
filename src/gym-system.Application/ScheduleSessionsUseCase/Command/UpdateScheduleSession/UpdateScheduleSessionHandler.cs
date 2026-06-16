@@ -26,6 +26,15 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
             _userRepository = userRepository;
             _roleRepository = roleRepository;
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="cmd"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        /// <remarks>not finished 要加上寫編輯紀錄的log</remarks>
         public async Task<bool> Handle(UpdateScheduleSessionCommand cmd, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(cmd.SessionId))
@@ -124,7 +133,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
             }
         }
 
-        private static DateOnly ParseDateOrDefault(string? value, DateOnly defaultValue)
+        private DateOnly ParseDateOrDefault(string? value, DateOnly defaultValue)
         {
             if (value is null) return defaultValue;
 

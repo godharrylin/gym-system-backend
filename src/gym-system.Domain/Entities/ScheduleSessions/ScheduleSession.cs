@@ -1,3 +1,4 @@
+
 namespace gym_system.Domain.Entities.ScheduleSessions
 {
     public sealed class ScheduleSession
@@ -50,8 +51,32 @@ namespace gym_system.Domain.Entities.ScheduleSessions
         public bool IsFree { get; private set; }
         public DateTime? UpdateTime { get; private set; }
 
+        public static ScheduleSession Create(DateOnly date, string classId, string className, string classLabelColor,
+                                             string instructorId, string instructorName, DateTime startAt, DateTime endAt,
+                                             bool isFree)
+        {
+            ValidateClassInfo(classId, className);
+            ValidateDateRange(date, startAt, endAt);
+
+            return new ScheduleSession(
+                arrangeSn: 0,
+                arrangeId: string.Empty,
+                date: date,
+                classId: classId?.Trim() ?? string.Empty,
+                className: className?.Trim() ?? string.Empty,
+                classLabelColor: classLabelColor?.Trim() ?? string.Empty,
+                instructorId: instructorId?.Trim() ?? string.Empty,
+                instructorName: instructorName?.Trim() ?? string.Empty,
+                startAt: startAt,
+                endAt: endAt,
+                status: SessionStatus.Open,
+                source: "Manual",
+                ruleSn: "",
+                isFree: isFree);
+        }
+
         /// <summary>
-        /// 
+        /// 建立排課模板
         /// </summary>
         /// <param name="template">模板課</param>
         /// <param name="weekStart">星期一的日期</param>
@@ -69,10 +94,7 @@ namespace gym_system.Domain.Entities.ScheduleSessions
             var startAt = sessionDate.ToDateTime(TimeOnly.FromTimeSpan(template.StartTime));
             var endAt = sessionDate.ToDateTime(TimeOnly.FromTimeSpan(template.EndTime));
 
-            if (endAt <= startAt)
-            {
-                throw new InvalidOperationException("課程結束時間必須晚於開始時間");
-            }
+            ValidateDateRange(sessionDate, startAt, endAt);
 
             return new ScheduleSession(
                 arrangeSn: 0,
@@ -142,20 +164,9 @@ namespace gym_system.Domain.Entities.ScheduleSessions
             bool isFree,
             DateTime updateTime)
         {
-            if (string.IsNullOrWhiteSpace(classId))
-                throw new InvalidOperationException("課程 ID 不可為空");
 
-            if (string.IsNullOrWhiteSpace(className))
-                throw new InvalidOperationException("課程名稱不可為空");
-
-            if (endAt <= startAt)
-                throw new InvalidOperationException("結束時間必須晚於起始時間");
-
-            if (DateOnly.FromDateTime(startAt) != date)
-                throw new InvalidOperationException("開始時間與課程日期不一致");
-
-            if (DateOnly.FromDateTime(endAt) != date)
-                throw new InvalidOperationException("課程不可跨日");
+            ValidateClassInfo(classId, className);
+            ValidateDateRange(date, startAt, endAt);
 
             Date = date;
             ClassId = classId.Trim();
@@ -169,8 +180,29 @@ namespace gym_system.Domain.Entities.ScheduleSessions
             IsFree = isFree;
             UpdateTime = updateTime;
         }
+
+        private static void ValidateClassInfo(string classId, string className)
+        {
+            if (string.IsNullOrWhiteSpace(classId))
+                throw new InvalidOperationException("課程 ID 不可為空");
+
+            if (string.IsNullOrWhiteSpace(className))
+                throw new InvalidOperationException("課程名稱不可為空");
+        }
+        private static void ValidateDateRange(DateOnly date, DateTime startAt, DateTime endAt)
+        {
+            if (endAt <= startAt)
+                throw new InvalidOperationException("結束時間必須晚於起始時間");
+
+            if (DateOnly.FromDateTime(startAt) != date)
+                throw new InvalidOperationException("開始時間與課程日期不一致");
+
+            if (DateOnly.FromDateTime(endAt) != date)
+                throw new InvalidOperationException("課程不可跨日");
+        }
     }
 
+    
     public enum SessionStatus
     {
         Open,
@@ -178,5 +210,4 @@ namespace gym_system.Domain.Entities.ScheduleSessions
         Finished,
         Ongoing,
     }
-    
 }

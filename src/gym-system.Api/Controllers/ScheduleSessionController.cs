@@ -1,5 +1,6 @@
 using gym_system.Api.Contracts.ScheduleRules;
 using gym_system.Api.Contracts.ScheduleSessions;
+using gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleSession;
 using gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureScheduleWeek;
 using gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleSession;
 using Microsoft.AspNetCore.Mvc;
@@ -12,15 +13,31 @@ namespace gym_system.Api.Controllers
     public sealed class ScheduleSessionController : ControllerBase
     {
         private readonly GetOrEnsureScheduleWeekHandler _getOrEnsureScheduleWeekHandler;
+        private readonly CreateScheduleSessionHandler _createScheduleSessionHandler;
         private readonly UpdateScheduleSessionHandler _updateScheduleSessionHandler;
 
         public ScheduleSessionController(GetOrEnsureScheduleWeekHandler getOrEnsureScheduleWeekHandler,
-                                         UpdateScheduleSessionHandler updateScheduleSessionHandler)
+                                        CreateScheduleSessionHandler createScheduleSessionHandler, 
+                                        UpdateScheduleSessionHandler updateScheduleSessionHandler)
         {
             _getOrEnsureScheduleWeekHandler = getOrEnsureScheduleWeekHandler;
+            _createScheduleSessionHandler = createScheduleSessionHandler;
             _updateScheduleSessionHandler = updateScheduleSessionHandler;
         }
 
+
+        [HttpPost]
+        public async Task<ActionResult<bool>> CreateScheduleSessionAsync([FromBody] ScheduleSessionRequest req, CancellationToken ct)
+        {
+            var command = new CreateScheduleSessionCommand
+            {
+                ClassId = req.classId ?? "",
+                IsFree = req?.isFree,
+                Date = req?.date ?? "",
+                StartTime = req?.startTime ?? ""
+            };
+            return Ok(await _createScheduleSessionHandler.Handle(command, ct));
+        }
 
         /// <summary>
         /// 更新某筆已存在的排課實例，partial update
@@ -44,7 +61,7 @@ namespace gym_system.Api.Controllers
             };
             return Ok(await _updateScheduleSessionHandler.Handle(cmd, ct));
         }
-        //}
+
         /// <summary>
         /// 撈取當週沒有被取消的實際課程表，如果該週沒有排課則會從模板課程先排課
         /// </summary>

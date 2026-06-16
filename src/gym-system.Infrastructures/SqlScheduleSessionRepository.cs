@@ -86,6 +86,71 @@ namespace gym_system.Infrastructures
             return rows.Select(ToTemplate).ToList();
         }
 
+        public async Task<bool> AddAsync(ScheduleSession newSession, CancellationToken ct)
+        {
+            const string sql = """
+                    INSERT INTO dbo.cls_scdle_arnge(
+                        cls_scdle_date,
+                        class_id,
+                        class_name,
+                        class_label_color,
+                        cls_scdle_arnge_instructor_id,
+                        instructor_name,
+                        cls_scdle_arnge_st,
+                        cls_scdle_arnge_et,
+                        cls_scdle_status,
+                        cls_scdle_arnge_is_free,
+                        cls_scdle_source,
+                        cls_scdle_rules_sn
+                    )
+                    SELECT
+                        @Date,
+                        @ClassId,
+                        @ClassName,
+                        @ClassLabelColor,
+                        @InstructorId,
+                        @InstructorName,
+                        @StartAt,
+                        @EndAt,
+                        @Status,
+                        @IsFree,
+                        @Source,
+                        @RuleSn
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.cls_scdle_arnge WITH (UPDLOCK, HOLDLOCK)
+                        WHERE ISNULL(cls_scdle_status, 'Cancel') <> 'Cancel'
+                          AND @StartAt < DATEADD(MINUTE, @BufferTime, cls_scdle_arnge_et)
+                          AND cls_scdle_arnge_st < DATEADD(MINUTE, @BufferTime, @EndAt)
+                    );
+                """;
+
+            var command = new CommandDefinition(
+                sql,
+                new
+                {
+                    Date = newSession.Date.ToDateTime(TimeOnly.MinValue),
+                    newSession.ClassId,
+                    newSession.ClassName,
+                    newSession.ClassLabelColor,
+                    newSession.InstructorId,
+                    newSession.InstructorName,
+                    newSession.StartAt,
+                    newSession.EndAt,
+                    Status = newSession.Status.ToString(),
+                    newSession.IsFree,
+                    newSession.Source,
+                    newSession.RuleSn
+                },
+                transaction: _session.Transaction,
+                cancellationToken: ct
+            );
+
+            var affectedRows = await _session.Connection.ExecuteAsync(command);
+
+            return affectedRows == 1;
+        }
+
         public async Task AddRangeAsync(IReadOnlyList<ScheduleSession> sessions, CancellationToken ct)
         {
             const string sql = """
