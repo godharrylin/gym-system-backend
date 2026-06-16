@@ -42,6 +42,7 @@ namespace gym_system.Infrastructures
         public static IServiceCollection AddInfrastructureSql(this IServiceCollection services)
         {
             services.AddCommonInfrastructure();
+            services.AddScoped<IUnitOfWork, SqlUnitOfWork>();
 
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
             services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
@@ -61,6 +62,7 @@ namespace gym_system.Infrastructures
             services.AddScoped<IInstructorQueryService, DapperGetInstructorsQueryService>();
             services.AddScoped<ISqlSession, SqlSession>();
             services.AddScoped<IScheduleRuleRepository, SqlScheduleRuleRepository>();
+            services.AddScoped<IScheduleSessionRepository, SqlScheduleSessionRepository>();
             DapperConfig.Register();
             services.AddScoped<ICourseRepository, SqlCourseRepository>();
             services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();

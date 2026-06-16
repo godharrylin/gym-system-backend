@@ -117,7 +117,7 @@ namespace gym_system.Infrastructures
                 sql,
                 new
                 {
-                    RuleSn = scheduleRule.Sn,
+                    RuleSn = scheduleRule.RuleSn,
                     scheduleRule.ClassId,
                     scheduleRule.DayOfWeek,
                     scheduleRule.StartTime,

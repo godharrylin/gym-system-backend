@@ -10,7 +10,7 @@
         /// <summary>
         /// 排課模板流水號
         /// </summary>
-        public required int RuleSn { get; set; }
+        public required string RuleSn { get; set; }
         
         /// <summary>
         /// 預設課程 ID
