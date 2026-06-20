@@ -9,5 +9,7 @@
         public bool? isFree { get; set; }
         public string? startTime { get; set; }
         public string? status { get; set; }
+        public string? operatorId { get; set; }
+        public string? remark { get; set; }
     }
 }

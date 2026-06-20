@@ -55,7 +55,7 @@ namespace gym_system.Infrastructures
         private static IServiceCollection AddCommonInfrastructure(this IServiceCollection services)
         {
             services.AddScoped<IUnitOfWork, NoopUnitOfWork>();
-            services.AddScoped<IClock, SystemClock>();
+            services.AddScoped<IClock, TaipeiClock>();
             services.AddScoped<IUserRepository, SqlUserRepository>();
             services.AddScoped<IUserRoleRepository, SqlUserRoleRepository>();
             services.AddScoped<ICourseRepository, SqlCourseRepository>();
@@ -63,6 +63,7 @@ namespace gym_system.Infrastructures
             services.AddScoped<ISqlSession, SqlSession>();
             services.AddScoped<IScheduleRuleRepository, SqlScheduleRuleRepository>();
             services.AddScoped<IScheduleSessionRepository, SqlScheduleSessionRepository>();
+            services.AddScoped<IScheduleSessionLogRepository, SqlScheduleSessionLogRepository>();
             DapperConfig.Register();
             services.AddScoped<ICourseRepository, SqlCourseRepository>();
             services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
@@ -224,9 +225,17 @@ namespace gym_system.Infrastructures
         public Task RollbackAsync(CancellationToken ct) => Task.CompletedTask;
     }
 
-    internal sealed class SystemClock : IClock
+    internal sealed class TaipeiClock : IClock
     {
-        public DateTime Now() => DateTime.UtcNow;
-        public DateOnly Today() => DateOnly.FromDateTime(DateTime.UtcNow);
+        //  台北時間
+        private static readonly TimeZoneInfo TaipeiTimeZone =
+            TimeZoneInfo.FindSystemTimeZoneById("Asia/Taipei");
+
+        public DateTime Now()
+        {
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TaipeiTimeZone);
+        }
+
+        public DateOnly Today() => DateOnly.FromDateTime(Now());
     }
 }

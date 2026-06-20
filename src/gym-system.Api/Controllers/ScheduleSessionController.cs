@@ -61,7 +61,9 @@ namespace gym_system.Api.Controllers
                 InstructorId = req.instructorId?.Trim(),
                 StartTime = req.startTime,
                 Status = req.status,
-                IsFree = req.isFree
+                IsFree = req.isFree,
+                OperatorId = req.operatorId?.Trim(),
+                Remark = req.remark?.Trim()
             };
             return Ok(await _updateScheduleSessionHandler.Handle(cmd, ct));
         }
@@ -73,11 +75,16 @@ namespace gym_system.Api.Controllers
         /// <param name="ct"></param>
         /// <returns></returns>
         [HttpPost("{arrangeId}/cancel")]
-        public async Task<ActionResult<bool>> CancelScheduleAsync([FromRoute] string arrangeId, CancellationToken ct)
+        public async Task<ActionResult<bool>> CancelScheduleAsync(
+            [FromRoute] string arrangeId,
+            [FromBody] ScheduleSessionRequest? req,
+            CancellationToken ct)
         {
             var cmd = new CancelScheduleSessionCommand
             {
-                ArrangeId = arrangeId
+                ArrangeId = arrangeId,
+                OperatorId = req?.operatorId?.Trim(),
+                Remark = req?.remark?.Trim()
             };
 
             return Ok(await _cancelScheduleSessionHandler.Handle(cmd, ct));

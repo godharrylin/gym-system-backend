@@ -1,4 +1,5 @@
-﻿using gym_system.Domain.Entities.Courses;
+using gym_system.Application.ScheduleSessionsUseCase.Command;
+using gym_system.Domain.Entities.Courses;
 using gym_system.Domain.Entities.ScheduleSessions;
 using gym_system.Domain.Repositories;
 using System.Globalization;
@@ -12,12 +13,18 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
         private readonly ICourseRepository _courseRepository;
         private readonly IUserRepository _userRepository;
         private readonly IUserRoleRepository _roleRepository;
+        private readonly IScheduleSessionLogRepository _scheduleSessionLogRepository;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IClock _clock;
 
-        public UpdateScheduleSessionHandler(IScheduleSessionRepository scheduleSessionRepository,
-            ICourseRepository courseRepository, IUnitOfWork unitOfWork, IClock clock,
-            IUserRepository userRepository, IUserRoleRepository roleRepository)
+        public UpdateScheduleSessionHandler(
+            IScheduleSessionRepository scheduleSessionRepository,
+            ICourseRepository courseRepository,
+            IUnitOfWork unitOfWork,
+            IClock clock,
+            IUserRepository userRepository,
+            IUserRoleRepository roleRepository,
+            IScheduleSessionLogRepository scheduleSessionLogRepository)
         {
             _scheduleSessionRepository = scheduleSessionRepository;
             _courseRepository = courseRepository;
@@ -25,6 +32,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
             _clock = clock;
             _userRepository = userRepository;
             _roleRepository = roleRepository;
+            _scheduleSessionLogRepository = scheduleSessionLogRepository;
         }
 
         /// <summary>
@@ -45,6 +53,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
             {
                 var session = await _scheduleSessionRepository.GetByIdAsync(cmd.SessionId.Trim(), ct)
                     ?? throw new InvalidOperationException("找不到排課資料");
+                var before = ScheduleSessionSnapshot.From(session);
 
                 var requestedClassId = NormalizeOptional(cmd.ClassId);
                 var classChanged =
@@ -107,6 +116,13 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
                     isFree: cmd.IsFree ?? newCourse?.IsFree ?? session.IsFree,
                     updateTime: _clock.Now());
 
+                var changedData = ScheduleSessionChangeLogBuilder.Build(before, session);
+                if (changedData is null)
+                {
+                    await _unitOfWork.CommitAsync(ct);
+                    return true;
+                }
+
                 if (session.Status != SessionStatus.Cancel)
                 {
                     var conflictSession =
@@ -122,6 +138,14 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
                     await _unitOfWork.RollbackAsync(ct);
                     return false;
                 }
+
+                var log = ScheduleSessionLog.Create(
+                    arrangeSn: session.ArrangeSn,
+                    changedData: changedData,
+                    operatorId: cmd.OperatorId,
+                    remark: cmd.Remark);
+
+                await _scheduleSessionLogRepository.AddAsync(log, ct);
 
                 await _unitOfWork.CommitAsync(ct);
                 return true;

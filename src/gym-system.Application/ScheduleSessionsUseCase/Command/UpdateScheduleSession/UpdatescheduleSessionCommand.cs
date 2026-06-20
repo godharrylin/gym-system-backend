@@ -13,5 +13,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
         public string? StartTime { get; set; }
         public string? Status { get; set; }
         public bool? IsFree { get; set; }
+        public string? OperatorId { get; set; }
+        public string? Remark { get; set; }
     }
 }
