@@ -13,8 +13,9 @@ namespace gym_system.Domain.Repositories
         /// <param name="ct"></param>
         /// <returns></returns>
         public Task<UserRole?> GetUserRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct);
+        public Task<IReadOnlyList<UserRole>> GetActiveRolesAsync(string userId, CancellationToken ct);
         public Task<bool> AddRoleAsync(UserRole userRole, CancellationToken ct);
-        public Task<bool> ReactiveRole(string userId, UserRoleCode roleType, CancellationToken ct);
+        public Task<bool> ReactivateRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct);
         public Task<bool> SetRoleActiveAsync(string userId, UserRoleCode roleType, bool isActive, CancellationToken ct);
     }
 }

@@ -7,6 +7,16 @@ namespace gym_system.Domain.Entities.Members
             UserId = userId;
         }
 
+        private StudentProfile(
+            string userId,
+            DateTime? lastVisitAt,
+            CurrentTicketSnapshot? currentTicket)
+        {
+            UserId = userId;
+            LastVisitAt = lastVisitAt;
+            CurrentTicket = currentTicket;
+        }
+
         public string UserId { get; }
         public DateTime? LastVisitAt { get; private set; }
         public CurrentTicketSnapshot? CurrentTicket { get; private set; }
@@ -21,9 +31,27 @@ namespace gym_system.Domain.Entities.Members
             return new StudentProfile(userId.Trim());
         }
 
+        public static StudentProfile Rehydrate(
+            string userId,
+            DateTime? lastVisitAt,
+            CurrentTicketSnapshot? currentTicket)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                throw new InvalidOperationException("UserId 必填");
+            }
+
+            return new StudentProfile(userId.Trim(), lastVisitAt, currentTicket);
+        }
+
         public void UpdateCurrentTicket(CurrentTicketSnapshot snapshot)
         {
             CurrentTicket = snapshot;
+        }
+
+        public void RecordVisit(DateTime visitedAt)
+        {
+            LastVisitAt = visitedAt;
         }
     }
 

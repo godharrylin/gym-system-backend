@@ -63,7 +63,7 @@ namespace gym_system.Application.Tests
         [Fact]
         public async Task Handle_ShouldReactivateRole_WhenRoleExistsButInactive()
         {
-            // Covers handler branch: role exists but inactive (ReactiveRole).
+        // Covers handler branch: role exists but inactive (ReactivateRoleAsync).
             var sut = CreateSut();
             sut.UserRepository.FindUserResult = User.Rehydrate("U0000000003", "Ben", "0911000000", "pw", true);
             sut.RoleRepository.GetRoleResult = UserRole.Assign(
@@ -219,7 +219,7 @@ namespace gym_system.Application.Tests
                 return Task.FromResult(AddResultUserId);
             }
 
-            public Task<User?> FindUserByPhone(string phone, CancellationToken ct)
+            public Task<User?> FindUserByPhoneAsync(string phone, CancellationToken ct)
             {
                 LastFindPhone = phone;
                 return Task.FromResult(FindUserResult);
@@ -265,6 +265,11 @@ namespace gym_system.Application.Tests
                 return Task.FromResult(GetRoleResult);
             }
 
+            public Task<IReadOnlyList<UserRole>> GetActiveRolesAsync(string userId, CancellationToken ct)
+            {
+                return Task.FromResult<IReadOnlyList<UserRole>>([]);
+            }
+
             public Task<bool> AddRoleAsync(UserRole userRole, CancellationToken ct)
             {
                 AddRoleCallCount++;
@@ -272,7 +277,7 @@ namespace gym_system.Application.Tests
                 return Task.FromResult(AddRoleResult);
             }
 
-            public Task<bool> ReactiveRole(string userId, UserRoleCode roleType, CancellationToken ct)
+            public Task<bool> ReactivateRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct)
             {
                 ReactiveCallCount++;
                 LastReactiveUserId = userId;

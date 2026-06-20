@@ -281,16 +281,47 @@ namespace gym_system.Application.Tests
             public List<StudentProfile> StoredProfiles { get; } = [];
             public List<CurrentTicketSnapshot> UpdatedSnapshots { get; } = [];
 
+            public Task AddAsync(StudentProfile profile, CancellationToken ct)
+            {
+                StoredProfiles.Add(profile);
+                return Task.CompletedTask;
+            }
+
             public Task AddRangeAsync(IReadOnlyList<StudentProfile> profiles, CancellationToken ct)
             {
                 StoredProfiles.AddRange(profiles);
                 return Task.CompletedTask;
             }
 
-            public Task UpdateCurrentTicketAsync(string userId, CurrentTicketSnapshot snapshot, CancellationToken ct)
+            public Task<StudentProfile?> FindByUserIdAsync(string userId, CancellationToken ct)
             {
+                var profile = StoredProfiles.FirstOrDefault(x => x.UserId == userId);
+                return Task.FromResult(profile);
+            }
+
+            public Task<bool> UpdateLastVisitAsync(string userId, DateTime lastVisitAt, CancellationToken ct)
+            {
+                var profile = StoredProfiles.FirstOrDefault(x => x.UserId == userId);
+                if (profile is null)
+                {
+                    return Task.FromResult(false);
+                }
+
+                profile.RecordVisit(lastVisitAt);
+                return Task.FromResult(true);
+            }
+
+            public Task<bool> UpdateCurrentTicketAsync(string userId, CurrentTicketSnapshot snapshot, CancellationToken ct)
+            {
+                var profile = StoredProfiles.FirstOrDefault(x => x.UserId == userId);
+                if (profile is null)
+                {
+                    return Task.FromResult(false);
+                }
+
+                profile.UpdateCurrentTicket(snapshot);
                 UpdatedSnapshots.Add(snapshot);
-                return Task.CompletedTask;
+                return Task.FromResult(true);
             }
         }
 

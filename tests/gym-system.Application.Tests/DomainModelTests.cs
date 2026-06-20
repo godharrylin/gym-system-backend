@@ -35,6 +35,36 @@ public sealed class DomainModelTests
     }
 
     [Fact]
+    public void StudentProfileRehydrate_ShouldRestoreProfileState()
+    {
+        var visitedAt = new DateTime(2026, 6, 20, 10, 30, 0);
+        var snapshot = new CurrentTicketSnapshot
+        {
+            TicketId = "PASS-1",
+            TicketType = "PACK",
+            TicketValidState = "Active",
+            TicketPaymentState = "Paid",
+            UpdatedAt = visitedAt
+        };
+
+        var profile = StudentProfile.Rehydrate("U0000000001", visitedAt, snapshot);
+
+        Assert.Equal(visitedAt, profile.LastVisitAt);
+        Assert.Same(snapshot, profile.CurrentTicket);
+    }
+
+    [Fact]
+    public void StudentProfileRecordVisit_ShouldUpdateLastVisitAt()
+    {
+        var profile = StudentProfile.Create("U0000000001");
+        var visitedAt = new DateTime(2026, 6, 20, 11, 0, 0);
+
+        profile.RecordVisit(visitedAt);
+
+        Assert.Equal(visitedAt, profile.LastVisitAt);
+    }
+
+    [Fact]
     public void UserRoleAssign_ShouldRejectUndefinedRoleCode()
     {
         Assert.Throws<InvalidOperationException>(() =>

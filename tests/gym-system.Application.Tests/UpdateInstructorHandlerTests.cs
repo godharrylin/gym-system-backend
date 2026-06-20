@@ -195,7 +195,7 @@ namespace gym_system.Application.Tests
                 return Task.FromResult(FindByIdResult);
             }
 
-            public Task<User?> FindUserByPhone(string phone, CancellationToken ct)
+            public Task<User?> FindUserByPhoneAsync(string phone, CancellationToken ct)
             {
                 return Task.FromResult<User?>(null);
             }
@@ -227,12 +227,17 @@ namespace gym_system.Application.Tests
                 return Task.FromResult(GetRoleResult);
             }
 
+            public Task<IReadOnlyList<UserRole>> GetActiveRolesAsync(string userId, CancellationToken ct)
+            {
+                return Task.FromResult<IReadOnlyList<UserRole>>([]);
+            }
+
             public Task<bool> AddRoleAsync(UserRole userRole, CancellationToken ct)
             {
                 return Task.FromResult(true);
             }
 
-            public Task<bool> ReactiveRole(string userId, UserRoleCode roleType, CancellationToken ct)
+            public Task<bool> ReactivateRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct)
             {
                 return Task.FromResult(true);
             }

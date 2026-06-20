@@ -41,9 +41,9 @@ namespace gym_system.Infrastructures
         public async Task<string> AddAsync(User user, CancellationToken ct)
         {
             const string sql = """
-                        INSERT INTO dbo.users (usr_name, usr_phone, usr_active)
+                        INSERT INTO dbo.users (usr_name, usr_phone, usr_pwd, usr_active)
                         OUTPUT INSERTED.usr_id
-                        VALUES (@Name, @Phone, @IsActive)
+                        VALUES (@Name, @Phone, @Password, @IsActive)
                     """;
 
             var createdUserId = await _session.Connection.QuerySingleAsync<string>(
@@ -64,6 +64,7 @@ namespace gym_system.Infrastructures
                             u.usr_id
                             ,u.usr_name
                             ,u.usr_phone
+                            ,u.usr_pwd
                             ,u.usr_active
                         FROM dbo.users AS u
                         WHERE u.usr_id = @userId
@@ -76,11 +77,11 @@ namespace gym_system.Infrastructures
                     cancellationToken: ct)
             );
 
-            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_phone, row.usr_active)
+            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_pwd, row.usr_active)
                 : null;
         }
 
-        public async Task<User?> FindUserByPhone(string phone, CancellationToken ct)
+        public async Task<User?> FindUserByPhoneAsync(string phone, CancellationToken ct)
         {
             var searchPhone = phone;
             const string sql = """
@@ -88,6 +89,7 @@ namespace gym_system.Infrastructures
                             u.usr_id
                             ,usr_name
                             ,u.usr_phone
+                            ,u.usr_pwd
                             ,u.usr_active
                         FROM dbo.users AS u
                         WHERE u.usr_phone = @searchPhone
@@ -100,7 +102,7 @@ namespace gym_system.Infrastructures
                     cancellationToken: ct)
             );
 
-            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_phone, row.usr_active)
+            return (row != null) ? User.Rehydrate(row.usr_id, row.usr_name, row.usr_phone, row.usr_pwd, row.usr_active)
                 : null;
         }
 
@@ -169,6 +171,7 @@ namespace gym_system.Infrastructures
             public string usr_id { get; init; } = string.Empty;
             public string usr_name { get; init; } = string.Empty;
             public string usr_phone { get; init; } = string.Empty;
+            public string usr_pwd { get; init; } = string.Empty;
             public bool usr_active { get; init; }
 
         }

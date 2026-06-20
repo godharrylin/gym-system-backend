@@ -73,7 +73,7 @@ public sealed class UserRoleRepositoryIntegrationTests
         var roleRepo = scope.ServiceProvider.GetRequiredService<IUserRoleRepository>();
         CancellationToken ct = new CancellationToken();
 
-        await roleRepo.ReactiveRole("U00006", UserRoleCode.Instructor, ct);
+            await roleRepo.ReactivateRoleAsync("U00006", UserRoleCode.Instructor, ct);
     }
     private async Task<UserRole?> GetUserRoleAsync_Test(string userId, UserRoleCode roleType, CancellationToken ct)
     {

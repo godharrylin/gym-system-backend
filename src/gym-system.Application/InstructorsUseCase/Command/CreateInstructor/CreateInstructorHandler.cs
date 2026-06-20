@@ -31,7 +31,7 @@ namespace gym_system.Application.InstructorsUseCase.Command.CreateInstructor
             await _unitOfWork.BeginAsync(ct);
             try
             {
-                var user = await _userRepository.FindUserByPhone(phone, ct);
+                var user = await _userRepository.FindUserByPhoneAsync(phone, ct);
                 string userId;
                 //  如果輸入的電話號碼還沒被註冊，先註冊user
                 if (user == null)
@@ -61,7 +61,7 @@ namespace gym_system.Application.InstructorsUseCase.Command.CreateInstructor
                 else if(role.IsActive == false)
                 {
                     // 情境 2：有紀錄但被停用了 -> 重新啟用
-                    result = await _roleRepository.ReactiveRole(userId, role.RoleCode, ct);
+                    result = await _roleRepository.ReactivateRoleAsync(userId, role.RoleCode, ct);
                 }
                 else
                 {

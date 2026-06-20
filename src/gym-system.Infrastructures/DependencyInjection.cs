@@ -33,7 +33,6 @@ namespace gym_system.Infrastructures
             
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
             services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
-            services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
 
             return services;
         }
@@ -46,7 +45,7 @@ namespace gym_system.Infrastructures
 
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
             services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
-            services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
+            services.AddScoped<IStudentProfileRepository, SqlStudentProfileRepository>();
 
             return services;
         }
@@ -65,7 +64,6 @@ namespace gym_system.Infrastructures
             services.AddScoped<IScheduleSessionRepository, SqlScheduleSessionRepository>();
             services.AddScoped<IScheduleSessionLogRepository, SqlScheduleSessionLogRepository>();
             DapperConfig.Register();
-            services.AddScoped<ICourseRepository, SqlCourseRepository>();
             services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
             services.AddScoped<IScheduleRulesQueryService, DapperGetScheduleRulesQueryService>();
             return services;
@@ -152,21 +150,46 @@ namespace gym_system.Infrastructures
             _store = store;
         }
 
+        public Task AddAsync(StudentProfile profile, CancellationToken ct)
+        {
+            _store.Profiles.Add(profile);
+            return Task.CompletedTask;
+        }
+
         public Task AddRangeAsync(IReadOnlyList<StudentProfile> profiles, CancellationToken ct)
         {
             _store.Profiles.AddRange(profiles);
             return Task.CompletedTask;
         }
 
-        public Task UpdateCurrentTicketAsync(string userId, CurrentTicketSnapshot snapshot, CancellationToken ct)
+        public Task<StudentProfile?> FindByUserIdAsync(string userId, CancellationToken ct)
         {
             var profile = _store.Profiles.FirstOrDefault(x => x.UserId == userId);
-            if (profile is not null)
+            return Task.FromResult(profile);
+        }
+
+        public Task<bool> UpdateLastVisitAsync(string userId, DateTime lastVisitAt, CancellationToken ct)
+        {
+            var profile = _store.Profiles.FirstOrDefault(x => x.UserId == userId);
+            if (profile is null)
             {
-                profile.UpdateCurrentTicket(snapshot);
+                return Task.FromResult(false);
             }
 
-            return Task.CompletedTask;
+            profile.RecordVisit(lastVisitAt);
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> UpdateCurrentTicketAsync(string userId, CurrentTicketSnapshot snapshot, CancellationToken ct)
+        {
+            var profile = _store.Profiles.FirstOrDefault(x => x.UserId == userId);
+            if (profile is null)
+            {
+                return Task.FromResult(false);
+            }
+
+            profile.UpdateCurrentTicket(snapshot);
+            return Task.FromResult(true);
         }
     }
 

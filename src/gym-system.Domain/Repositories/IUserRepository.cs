@@ -13,7 +13,7 @@ namespace gym_system.Domain.Repositories
         Task<IReadOnlyList<string>> GetExistingPhonesAsync(IReadOnlyList<string> phones, CancellationToken ct);
         Task<string> AddAsync(User user, CancellationToken ct);
         Task<User?> FindUserByIdAsync(string userId, CancellationToken ct);
-        Task<User?> FindUserByPhone(string phone, CancellationToken ct);
+        Task<User?> FindUserByPhoneAsync(string phone, CancellationToken ct);
         Task<bool> ExistsPhoneForOtherUserAsync(string userId, string phone, CancellationToken ct);
         Task<bool> UpdateBasicProfileAsync(string userId, string name, string phone, CancellationToken ct);
     }
