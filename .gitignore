@@ -7,3 +7,5 @@
 
 
 .dotnet/
+
+.artifacts/

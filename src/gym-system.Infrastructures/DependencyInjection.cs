@@ -4,6 +4,8 @@ using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
+using gym_system.Domain.Entities.Users;
+using gym_system.Domain.Enums;
 using gym_system.Domain.Repositories;
 using gym_system.Infrastructures.Connections;
 using gym_system.Infrastructures.Dapper;
@@ -25,7 +27,8 @@ namespace gym_system.Infrastructures
             services.AddCommonInfrastructure();
 
             services.AddSingleton<InMemoryStore>();
-            services.AddScoped<IMemberRepository, InMemoryMemberRepository>();
+            services.AddScoped<IUserRepository, InMemoryUserRepository>();
+            services.AddScoped<IUserRoleRepository, InMemoryUserRoleRepository>();
             services.AddScoped<IStudentProfileRepository, InMemoryStudentProfileRepository>();
             services.AddScoped<ITicketPlanRepository, InMemoryTicketPlanRepository>();
             services.AddScoped<IOrderRepository, InMemoryOrderRepository>();
@@ -72,8 +75,9 @@ namespace gym_system.Infrastructures
 
     internal sealed class InMemoryStore
     {
-        public List<Member> Members { get; } = [];
         public List<StudentProfile> Profiles { get; } = [];
+        public List<User> Users { get; } = [];
+        public List<UserRole> UserRoles { get; } = [];
         public List<Order> Orders { get; } = [];
         public List<TicketPass> Passes { get; } = [];
         public List<TicketPlanKind> TicketPlans { get; } =
@@ -111,33 +115,131 @@ namespace gym_system.Infrastructures
         ];
     }
 
-    internal sealed class InMemoryMemberRepository : IMemberRepository
+    internal sealed class InMemoryUserRepository : IUserRepository
     {
         private readonly InMemoryStore _store;
 
-        public InMemoryMemberRepository(InMemoryStore store)
+        public InMemoryUserRepository(InMemoryStore store)
         {
             _store = store;
         }
 
-        public Task<bool> AnyPhoneExistsAsync(IReadOnlyList<string> phones, CancellationToken ct)
+        public Task<IReadOnlyList<string>> GetExistingPhonesAsync(IReadOnlyList<string> phones, CancellationToken ct)
         {
-            var exists = _store.Members.Any(m => phones.Contains(m.Phone, StringComparer.Ordinal));
-            return Task.FromResult(exists);
-        }
-
-        public Task AddRangeAsync(IReadOnlyList<Member> members, CancellationToken ct)
-        {
-            _store.Members.AddRange(members);
-            return Task.CompletedTask;
-        }
-
-        public Task<List<string>> GenerateIdsAsync(int count, CancellationToken ct)
-        {
-            var ids = Enumerable.Range(1, count)
-                .Select(_ => $"C{Guid.NewGuid():N}"[..7].ToUpperInvariant())
+            IReadOnlyList<string> result = _store.Users
+                .Where(user => phones.Contains(user.Phone, StringComparer.Ordinal))
+                .Select(user => user.Phone)
+                .Distinct(StringComparer.Ordinal)
                 .ToList();
-            return Task.FromResult(ids);
+            return Task.FromResult(result);
+        }
+
+        public Task<string> AddAsync(User user, CancellationToken ct)
+        {
+            var userId = $"U{_store.Users.Count + 1:0000000000}";
+            _store.Users.Add(User.Rehydrate(
+                userId,
+                user.Name,
+                user.Phone,
+                user.Password,
+                user.IsActive));
+            return Task.FromResult(userId);
+        }
+
+        public Task<User?> FindUserByIdAsync(string userId, CancellationToken ct)
+        {
+            return Task.FromResult(_store.Users.FirstOrDefault(user => user.Id == userId));
+        }
+
+        public Task<User?> FindUserByPhoneAsync(string phone, CancellationToken ct)
+        {
+            return Task.FromResult(_store.Users.FirstOrDefault(user => user.Phone == phone));
+        }
+
+        public Task<bool> ExistsPhoneForOtherUserAsync(string userId, string phone, CancellationToken ct)
+        {
+            return Task.FromResult(_store.Users.Any(user => user.Id != userId && user.Phone == phone));
+        }
+
+        public Task<bool> UpdateBasicProfileAsync(string userId, string name, string phone, CancellationToken ct)
+        {
+            var index = _store.Users.FindIndex(user => user.Id == userId);
+            if (index < 0)
+            {
+                return Task.FromResult(false);
+            }
+
+            var current = _store.Users[index];
+            _store.Users[index] = User.Rehydrate(
+                current.Id,
+                string.IsNullOrWhiteSpace(name) ? current.Name : name,
+                string.IsNullOrWhiteSpace(phone) ? current.Phone : phone,
+                current.Password,
+                current.IsActive);
+            return Task.FromResult(true);
+        }
+    }
+
+    internal sealed class InMemoryUserRoleRepository : IUserRoleRepository
+    {
+        private readonly InMemoryStore _store;
+
+        public InMemoryUserRoleRepository(InMemoryStore store)
+        {
+            _store = store;
+        }
+
+        public Task<UserRole?> GetUserRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct)
+        {
+            return Task.FromResult(_store.UserRoles.FirstOrDefault(
+                role => role.UserId == userId && role.RoleCode == roleType));
+        }
+
+        public Task<IReadOnlyList<UserRole>> GetActiveRolesAsync(string userId, CancellationToken ct)
+        {
+            IReadOnlyList<UserRole> result = _store.UserRoles
+                .Where(role => role.UserId == userId && role.IsActive)
+                .ToList();
+            return Task.FromResult(result);
+        }
+
+        public Task<bool> AddRoleAsync(UserRole userRole, CancellationToken ct)
+        {
+            var exists = _store.UserRoles.Any(role =>
+                role.UserId == userRole.UserId && role.RoleCode == userRole.RoleCode);
+            if (!exists)
+            {
+                _store.UserRoles.Add(userRole);
+            }
+
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> ReactivateRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct)
+        {
+            return SetRoleActiveAsync(userId, roleType, true, ct);
+        }
+
+        public Task<bool> SetRoleActiveAsync(
+            string userId,
+            UserRoleCode roleType,
+            bool isActive,
+            CancellationToken ct)
+        {
+            var index = _store.UserRoles.FindIndex(role =>
+                role.UserId == userId && role.RoleCode == roleType);
+            if (index < 0)
+            {
+                return Task.FromResult(false);
+            }
+
+            var current = _store.UserRoles[index];
+            _store.UserRoles[index] = UserRole.Assign(
+                current.UserId,
+                current.RoleCode,
+                current.AssignedAt,
+                isActive);
+            return Task.FromResult(true);
         }
     }
 

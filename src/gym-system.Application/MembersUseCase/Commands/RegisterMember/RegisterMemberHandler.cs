@@ -1,6 +1,7 @@
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
+using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Enums;
 using gym_system.Domain.Repositories;
 
@@ -8,7 +9,8 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
 {
     public sealed class RegisterMemberHandler
     {
-        private readonly IMemberRepository _memberRepository;
+        private readonly IUserRepository _userRepository;
+        private readonly IUserRoleRepository _userRoleRepository;
         private readonly IStudentProfileRepository _studentProfileRepository;
         private readonly ITicketPlanRepository _ticketPlanRepository;
         private readonly IOrderRepository _orderRepository;
@@ -17,7 +19,8 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
         private readonly IClock _clock;
 
         public RegisterMemberHandler(
-            IMemberRepository memberRepository,
+            IUserRepository userRepository,
+            IUserRoleRepository userRoleRepository,
             IStudentProfileRepository studentProfileRepository,
             ITicketPlanRepository ticketPlanRepository,
             IOrderRepository orderRepository,
@@ -25,7 +28,8 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
             IUnitOfWork unitOfWork,
             IClock clock)
         {
-            _memberRepository = memberRepository;
+            _userRepository = userRepository;
+            _userRoleRepository = userRoleRepository;
             _studentProfileRepository = studentProfileRepository;
             _ticketPlanRepository = ticketPlanRepository;
             _orderRepository = orderRepository;
@@ -44,21 +48,34 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
             await _unitOfWork.BeginAsync(ct);
             try
             {
-                if (await _memberRepository.AnyPhoneExistsAsync(phones, ct))
+                var existingPhones = await _userRepository.GetExistingPhonesAsync(phones, ct);
+                if (existingPhones.Count > 0)
                 {
                     throw new InvalidOperationException("手機號碼已被註冊");
                 }
 
-                //  一次性產生需要的會員ID
-                var ids = await _memberRepository.GenerateIdsAsync(command.Members.Count, ct);
-                var members = command.Members
-                    .Select((item, index) => Member.Register(ids[index], item.Name.Trim(), item.Phone.Trim()))
-                    .ToList();
+                var registeredUserIds = new List<string>(command.Members.Count);
+                foreach (var input in command.Members)
+                {
+                    var user = User.Register(
+                        input.Name.Trim(),
+                        input.Phone.Trim(),
+                        input.Phone.Trim());
+                    var userId = await _userRepository.AddAsync(user, ct);
 
-                await _memberRepository.AddRangeAsync(members, ct);
+                    var studentRole = UserRole.Assign(
+                        userId,
+                        UserRoleCode.Student,
+                        _clock.Now(),
+                        true);
+                    if (!await _userRoleRepository.AddRoleAsync(studentRole, ct))
+                    {
+                        throw new InvalidOperationException("建立會員角色失敗");
+                    }
 
-                var profiles = members.Select(member => StudentProfile.Create(member.Id)).ToList();
-                await _studentProfileRepository.AddRangeAsync(profiles, ct);
+                    await _studentProfileRepository.AddAsync(StudentProfile.Create(userId), ct);
+                    registeredUserIds.Add(userId);
+                }
 
                 Order? order = null;
 
@@ -86,22 +103,22 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
                     };
 
                     #region 計算訂單和訂單明細價格 (先算個人再加總) 
-                    var order_total_amount = plan.Price * members.Count;
+                    var order_total_amount = plan.Price * registeredUserIds.Count;
 
                     //  1. 兩人以上一起註冊直接給95折，先算個人
-                    var order_actual_amount_person = members.Count >= 2
+                    var order_actual_amount_person = registeredUserIds.Count >= 2
                         ? decimal.Round(plan.Price * 0.95m, 0, MidpointRounding.AwayFromZero)
                         : plan.Price;
 
                     //  2. 加總人數後便訂單實際價格
-                    var order_actual_amount = order_actual_amount_person * members.Count;
+                    var order_actual_amount = order_actual_amount_person * registeredUserIds.Count;
 
                     #endregion
                     var createDay = _clock.Now();
                     //  建立訂單資訊
                     order = Order.Create(
                         id: $"ORD-{Guid.NewGuid():N}",
-                        buyerId: members[0].Id,
+                        buyerId: registeredUserIds[0],
                         totalAmount: order_total_amount,
                         actualAmount: order_actual_amount,
                         paymentState: ticketPurchase.PaymentStatus == PaymentState.Paid
@@ -111,8 +128,8 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
                         buyAt: createDay);
 
                     //  建立訂單票券明細，及學生票券資訊
-                    var passes = new List<TicketPass>(members.Count);
-                    foreach (var member in members)
+                    var passes = new List<TicketPass>(registeredUserIds.Count);
+                    foreach (var userId in registeredUserIds)
                     {
                         //  票券訂單明細
                         var item = OrderItem.CreateTicketItem(
@@ -135,7 +152,7 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
                         //  建立票券資訊
                         var pass = TicketPass.Issue(
                             id: $"PASS-{Guid.NewGuid():N}",
-                            ownerId: member.Id,
+                            ownerId: userId,
                             orderId: order.Id,
                             orderItemId: item.Id,
                             plan: plan,
@@ -144,7 +161,10 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
                             today: DateOnly.FromDateTime(createDay));
 
                         passes.Add(pass);
-                        await _studentProfileRepository.UpdateCurrentTicketAsync(member.Id, pass.ToSnapshot(), ct);
+                        if (!await _studentProfileRepository.UpdateCurrentTicketAsync(userId, pass.ToSnapshot(), ct))
+                        {
+                            throw new InvalidOperationException("更新會員票券快照失敗");
+                        }
                     }
 
                     await _orderRepository.AddAsync(order, ct);
@@ -155,7 +175,7 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
 
                 return new RegisterMembersResult
                 {
-                    MemberIds = members.Select(x => x.Id).ToList(),
+                    MemberIds = registeredUserIds,
                     OrderId = order?.Id,
                     TotalAmount = order?.TotalAmount,
                     ActualAmount = order?.ActualAmount

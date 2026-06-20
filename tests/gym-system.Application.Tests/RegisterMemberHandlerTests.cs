@@ -2,6 +2,7 @@ using gym_system.Application.MembersUseCase.Commands.RegisterMember;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
+using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Enums;
 using gym_system.Domain.Repositories;
 using Xunit;
@@ -41,7 +42,7 @@ namespace gym_system.Application.Tests
         public async Task Handle_ShouldThrow_WhenPhoneAlreadyExistsInStorage()
         {
             var sut = CreateSut();
-            sut.MemberRepository.ExistingPhones.Add("0912345678");
+            sut.UserRepository.ExistingPhones.Add("0912345678");
 
             var command = new RegisterMembersCommand
             {
@@ -75,7 +76,9 @@ namespace gym_system.Application.Tests
             Assert.Null(result.TotalAmount);
             Assert.Null(result.ActualAmount);
 
-            Assert.Single(sut.MemberRepository.StoredMembers);
+            Assert.Single(sut.UserRepository.StoredUsers);
+            var role = Assert.Single(sut.RoleRepository.StoredRoles);
+            Assert.Equal(UserRoleCode.Student, role.RoleCode);
             Assert.Single(sut.ProfileRepository.StoredProfiles);
             Assert.Empty(sut.OrderRepository.StoredOrders);
             Assert.Empty(sut.PassRepository.StoredPasses);
@@ -210,9 +213,64 @@ namespace gym_system.Application.Tests
             Assert.Equal(0, sut.UnitOfWork.CommitCount);
         }
 
+        [Fact]
+        public async Task Handle_ShouldRollback_WhenStudentRoleCannotBeCreated()
+        {
+            var sut = CreateSut();
+            sut.RoleRepository.AddRoleResult = false;
+            var command = new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "A", Phone = "0912000001" }]
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+
+            Assert.Equal(1, sut.UnitOfWork.RollbackCount);
+            Assert.Empty(sut.ProfileRepository.StoredProfiles);
+        }
+
+        [Fact]
+        public async Task Handle_ShouldRollback_WhenStudentProfileCannotBeCreated()
+        {
+            var sut = CreateSut();
+            sut.ProfileRepository.ThrowOnAdd = true;
+            var command = new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "A", Phone = "0912000001" }]
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+
+            Assert.Equal(1, sut.UnitOfWork.RollbackCount);
+            Assert.Equal(0, sut.UnitOfWork.CommitCount);
+        }
+
+        [Fact]
+        public async Task Handle_ShouldRollback_WhenTicketSnapshotCannotBeUpdated()
+        {
+            var sut = CreateSut();
+            sut.ProfileRepository.UpdateCurrentTicketResult = false;
+            var command = new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "A", Phone = "0912000001" }],
+                TicketPurchase = new TicketPurchaseInput
+                {
+                    TicketPlanKindId = "T_002",
+                    ActivationDate = new DateOnly(2026, 3, 30),
+                    PaymentStatus = PaymentState.Paid
+                }
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+
+            Assert.Equal(1, sut.UnitOfWork.RollbackCount);
+            Assert.Equal(0, sut.UnitOfWork.CommitCount);
+        }
+
         private static SutBundle CreateSut()
         {
-            var memberRepository = new FakeMemberRepository();
+            var userRepository = new FakeUserRepository();
+            var roleRepository = new FakeUserRoleRepository();
             var profileRepository = new FakeStudentProfileRepository();
             var ticketPlanRepository = new FakeTicketPlanRepository();
             var orderRepository = new FakeOrderRepository();
@@ -221,7 +279,8 @@ namespace gym_system.Application.Tests
             var clock = new FakeClock();
 
             var handler = new RegisterMemberHandler(
-                memberRepository,
+                userRepository,
+                roleRepository,
                 profileRepository,
                 ticketPlanRepository,
                 orderRepository,
@@ -231,7 +290,8 @@ namespace gym_system.Application.Tests
 
             return new SutBundle(
                 handler,
-                memberRepository,
+                userRepository,
+                roleRepository,
                 profileRepository,
                 ticketPlanRepository,
                 orderRepository,
@@ -241,38 +301,88 @@ namespace gym_system.Application.Tests
 
         private sealed record SutBundle(
             RegisterMemberHandler Handler,
-            FakeMemberRepository MemberRepository,
+            FakeUserRepository UserRepository,
+            FakeUserRoleRepository RoleRepository,
             FakeStudentProfileRepository ProfileRepository,
             FakeTicketPlanRepository TicketPlanRepository,
             FakeOrderRepository OrderRepository,
             FakeTicketPassRepository PassRepository,
             FakeUnitOfWork UnitOfWork);
 
-        private sealed class FakeMemberRepository : IMemberRepository
+        private sealed class FakeUserRepository : IUserRepository
         {
-            public List<Member> StoredMembers { get; } = [];
+            public List<User> StoredUsers { get; } = [];
             public HashSet<string> ExistingPhones { get; } = [];
+            private int _nextId = 1;
 
-            public Task<bool> AnyPhoneExistsAsync(IReadOnlyList<string> phones, CancellationToken ct)
+            public Task<IReadOnlyList<string>> GetExistingPhonesAsync(IReadOnlyList<string> phones, CancellationToken ct)
             {
-                return Task.FromResult(phones.Any(p => ExistingPhones.Contains(p)));
+                IReadOnlyList<string> result = phones.Where(ExistingPhones.Contains).ToList();
+                return Task.FromResult(result);
             }
 
-            public Task AddRangeAsync(IReadOnlyList<Member> members, CancellationToken ct)
+            public Task<string> AddAsync(User user, CancellationToken ct)
             {
-                StoredMembers.AddRange(members);
-                foreach (var member in members)
+                StoredUsers.Add(user);
+                ExistingPhones.Add(user.Phone);
+                return Task.FromResult($"U{_nextId++:0000000000}");
+            }
+
+            public Task<User?> FindUserByIdAsync(string userId, CancellationToken ct)
+            {
+                return Task.FromResult<User?>(null);
+            }
+
+            public Task<User?> FindUserByPhoneAsync(string phone, CancellationToken ct)
+            {
+                return Task.FromResult(StoredUsers.FirstOrDefault(x => x.Phone == phone));
+            }
+
+            public Task<bool> ExistsPhoneForOtherUserAsync(string userId, string phone, CancellationToken ct)
+            {
+                return Task.FromResult(false);
+            }
+
+            public Task<bool> UpdateBasicProfileAsync(string userId, string name, string phone, CancellationToken ct)
+            {
+                return Task.FromResult(false);
+            }
+        }
+
+        private sealed class FakeUserRoleRepository : IUserRoleRepository
+        {
+            public List<UserRole> StoredRoles { get; } = [];
+            public bool AddRoleResult { get; set; } = true;
+
+            public Task<UserRole?> GetUserRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct)
+            {
+                return Task.FromResult(StoredRoles.FirstOrDefault(x => x.UserId == userId && x.RoleCode == roleType));
+            }
+
+            public Task<IReadOnlyList<UserRole>> GetActiveRolesAsync(string userId, CancellationToken ct)
+            {
+                IReadOnlyList<UserRole> result = StoredRoles.Where(x => x.UserId == userId && x.IsActive).ToList();
+                return Task.FromResult(result);
+            }
+
+            public Task<bool> AddRoleAsync(UserRole userRole, CancellationToken ct)
+            {
+                if (AddRoleResult)
                 {
-                    ExistingPhones.Add(member.Phone);
+                    StoredRoles.Add(userRole);
                 }
 
-                return Task.CompletedTask;
+                return Task.FromResult(AddRoleResult);
             }
 
-            public Task<List<string>> GenerateIdsAsync(int count, CancellationToken ct)
+            public Task<bool> ReactivateRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct)
             {
-                var ids = Enumerable.Range(1, count).Select(x => $"C{x:000000}").ToList();
-                return Task.FromResult(ids);
+                return Task.FromResult(false);
+            }
+
+            public Task<bool> SetRoleActiveAsync(string userId, UserRoleCode roleType, bool isActive, CancellationToken ct)
+            {
+                return Task.FromResult(false);
             }
         }
 
@@ -280,9 +390,16 @@ namespace gym_system.Application.Tests
         {
             public List<StudentProfile> StoredProfiles { get; } = [];
             public List<CurrentTicketSnapshot> UpdatedSnapshots { get; } = [];
+            public bool ThrowOnAdd { get; set; }
+            public bool UpdateCurrentTicketResult { get; set; } = true;
 
             public Task AddAsync(StudentProfile profile, CancellationToken ct)
             {
+                if (ThrowOnAdd)
+                {
+                    throw new InvalidOperationException("profile add failed");
+                }
+
                 StoredProfiles.Add(profile);
                 return Task.CompletedTask;
             }
@@ -313,6 +430,11 @@ namespace gym_system.Application.Tests
 
             public Task<bool> UpdateCurrentTicketAsync(string userId, CurrentTicketSnapshot snapshot, CancellationToken ct)
             {
+                if (!UpdateCurrentTicketResult)
+                {
+                    return Task.FromResult(false);
+                }
+
                 var profile = StoredProfiles.FirstOrDefault(x => x.UserId == userId);
                 if (profile is null)
                 {
