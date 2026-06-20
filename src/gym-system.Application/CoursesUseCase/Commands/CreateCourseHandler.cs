@@ -26,7 +26,7 @@ namespace gym_system.Application.CoursesUseCase.Commands
         {
             // 1. 檢查老師身分
             var user = await _userRepository.FindUserByIdAsync(command.InstructorId, ct);
-            if (user is null || !user.IsActived)
+            if (user is null || !user.IsActive)
                 throw new InvalidOperationException("找不到使用者或已停用");
 
             var role = await _roleRepository.GetUserRoleAsync(command.InstructorId, Domain.Enums.UserRoleCode.Instructor, ct);

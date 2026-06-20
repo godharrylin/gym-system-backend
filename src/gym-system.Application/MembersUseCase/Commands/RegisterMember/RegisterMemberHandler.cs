@@ -57,7 +57,7 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
 
                 await _memberRepository.AddRangeAsync(members, ct);
 
-                var profiles = members.Select(StudentProfile.CreateEmpty).ToList();
+                var profiles = members.Select(member => StudentProfile.Create(member.Id)).ToList();
                 await _studentProfileRepository.AddRangeAsync(profiles, ct);
 
                 Order? order = null;

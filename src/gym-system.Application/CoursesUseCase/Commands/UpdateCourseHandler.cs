@@ -31,7 +31,7 @@ namespace gym_system.Application.CoursesUseCase.Commands
             // 3. 檢查老師 (相依性檢查)
             // 這裡維持原樣，因為需要透過 Repository 查另一個聚合(資料表)
             var user = await _userRepository.FindUserByIdAsync(command.InstructorId, ct);
-            if (user is null || !user.IsActived) throw new InvalidOperationException("找不到使用者或已停用");
+            if (user is null || !user.IsActive) throw new InvalidOperationException("找不到使用者或已停用");
        
             var role = await _roleRepository.GetUserRoleAsync(command.InstructorId, Domain.Enums.UserRoleCode.Instructor, ct);
             if (role is null || !role.IsActive) throw new InvalidOperationException("該使用者不是老師或已停止授課");

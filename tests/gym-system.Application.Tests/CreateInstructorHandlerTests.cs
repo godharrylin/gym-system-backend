@@ -40,7 +40,7 @@ namespace gym_system.Application.Tests
         {
             // Covers handler branch: user exists + role == null (Add role only).
             var sut = CreateSut();
-            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000002", "Amy", "0911222333", "pw");
+            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000002", "Amy", "0911222333", "pw", true);
             sut.RoleRepository.GetRoleResult = null;
 
             var command = new CreateInstructorCommand
@@ -65,7 +65,7 @@ namespace gym_system.Application.Tests
         {
             // Covers handler branch: role exists but inactive (ReactiveRole).
             var sut = CreateSut();
-            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000003", "Ben", "0911000000", "pw");
+            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000003", "Ben", "0911000000", "pw", true);
             sut.RoleRepository.GetRoleResult = UserRole.Assign(
                 "U0000000003",
                 UserRoleCode.Instructor,
@@ -94,7 +94,7 @@ namespace gym_system.Application.Tests
         {
             // Covers handler branch: role exists and active (idempotent success).
             var sut = CreateSut();
-            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000004", "Cat", "0922000000", "pw");
+            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000004", "Cat", "0922000000", "pw", true);
             sut.RoleRepository.GetRoleResult = UserRole.Assign(
                 "U0000000004",
                 UserRoleCode.Instructor,
@@ -121,7 +121,7 @@ namespace gym_system.Application.Tests
         {
             // Covers handler branch: result == false, then rollback.
             var sut = CreateSut();
-            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000005", "Dan", "0933000000", "pw");
+            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000005", "Dan", "0933000000", "pw", true);
             sut.RoleRepository.GetRoleResult = null;
             sut.RoleRepository.AddRoleResult = false;
 
@@ -162,7 +162,7 @@ namespace gym_system.Application.Tests
         {
             // Covers handler catch path: repository throws => rollback and rethrow.
             var sut = CreateSut();
-            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000006", "Fox", "0955000000", "pw");
+            sut.UserRepository.FindUserResult = User.Rehydrate("U0000000006", "Fox", "0955000000", "pw", true);
             sut.RoleRepository.ThrowOnGetRole = true;
 
             var command = new CreateInstructorCommand

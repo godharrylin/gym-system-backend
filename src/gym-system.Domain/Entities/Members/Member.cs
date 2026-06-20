@@ -3,6 +3,7 @@
 namespace gym_system.Domain.Entities.Members
 {
     //  基於業務領域的 「學員/會員」的概念
+    [Obsolete("Member 人員資料將由 User 取代；請勿新增對 Member 的相依。")]
     public class Member
     {
         // 基本屬性 (可能存入 user 表)

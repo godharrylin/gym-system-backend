@@ -88,7 +88,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
                 {
                     var instructor = await _userRepository.FindUserByIdAsync(requestedInstructorId, ct);
 
-                    if (instructor is null || !instructor.IsActived)
+                    if (instructor is null || !instructor.IsActive)
                         throw new InvalidOperationException("選擇的老師不存在或已停用");
 
                     var role = await _roleRepository.GetUserRoleAsync(

@@ -21,7 +21,9 @@ namespace gym_system.Domain.Entities.Users
         public static UserRole Assign(string userId, UserRoleCode roleCode, DateTime now, bool isActiveRole)
         {
             if (string.IsNullOrWhiteSpace(userId)) throw new InvalidOperationException("UserId 必填");
-            return new UserRole(userId, roleCode, now, isActiveRole);
+            if (!Enum.IsDefined(roleCode)) throw new InvalidOperationException("RoleCode 無效");
+
+            return new UserRole(userId.Trim(), roleCode, now, isActiveRole);
         }
 
         public void Deactivate()

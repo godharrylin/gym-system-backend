@@ -12,7 +12,7 @@ namespace gym_system.Application.Tests
         public async Task Handle_ShouldUpdateProfileAndRoleStatus_WhenInputValid()
         {
             var sut = CreateSut();
-            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw");
+            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw", true);
 
             var command = new UpdateInstructorCommand
             {
@@ -58,7 +58,7 @@ namespace gym_system.Application.Tests
         public async Task Handle_ShouldRollbackAndThrow_WhenPhoneUsedByOtherUser()
         {
             var sut = CreateSut();
-            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw");
+            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw", true);
             sut.UserRepository.ExistsPhoneInOtherUser = true;
 
             var command = new UpdateInstructorCommand
@@ -78,7 +78,7 @@ namespace gym_system.Application.Tests
         public async Task Handle_ShouldRollbackAndThrow_WhenInstructorRoleNotFound()
         {
             var sut = CreateSut();
-            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw");
+            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw", true);
             sut.RoleRepository.GetRoleResult = null;
 
             var command = new UpdateInstructorCommand
@@ -98,7 +98,7 @@ namespace gym_system.Application.Tests
         public async Task Handle_ShouldRollbackAndReturnFalse_WhenSetRoleActiveFails()
         {
             var sut = CreateSut();
-            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw");
+            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw", true);
             sut.RoleRepository.GetRoleResult = UserRole.Assign("U0000000001", UserRoleCode.Instructor, DateTime.UtcNow, true);
             sut.RoleRepository.SetRoleActiveResult = false;
 
@@ -121,7 +121,7 @@ namespace gym_system.Application.Tests
         public async Task Handle_ShouldUpdateOnlyNameAndPhone_WhenIsEmployedIsNull()
         {
             var sut = CreateSut();
-            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw");
+            sut.UserRepository.FindByIdResult = User.Rehydrate("U0000000001", "Old", "0912000000", "pw", true);
 
             var command = new UpdateInstructorCommand
             {

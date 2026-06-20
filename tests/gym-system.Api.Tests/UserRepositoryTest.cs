@@ -78,7 +78,7 @@ namespace gym_system.Api.Tests
             var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
             CancellationToken ct = new CancellationToken();
             var user = await userRepo.FindUserByPhone("0900000000", ct);
-            _output.WriteLine($"User Id:{user.Id}, Phone: {user.Phone}, isactive: {user.IsActived}");
+            _output.WriteLine($"User Id:{user.Id}, Phone: {user.Phone}, isactive: {user.IsActive}");
 
         }
     }

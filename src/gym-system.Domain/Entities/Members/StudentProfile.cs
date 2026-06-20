@@ -11,9 +11,14 @@ namespace gym_system.Domain.Entities.Members
         public DateTime? LastVisitAt { get; private set; }
         public CurrentTicketSnapshot? CurrentTicket { get; private set; }
 
-        public static StudentProfile CreateEmpty(Member member)
+        public static StudentProfile Create(string userId)
         {
-            return new StudentProfile(member.Id);
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                throw new InvalidOperationException("UserId 必填");
+            }
+
+            return new StudentProfile(userId.Trim());
         }
 
         public void UpdateCurrentTicket(CurrentTicketSnapshot snapshot)

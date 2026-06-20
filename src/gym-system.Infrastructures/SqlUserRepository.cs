@@ -43,7 +43,7 @@ namespace gym_system.Infrastructures
             const string sql = """
                         INSERT INTO dbo.users (usr_name, usr_phone, usr_active)
                         OUTPUT INSERTED.usr_id
-                        VALUES (@Name, @Phone, @IsActived)
+                        VALUES (@Name, @Phone, @IsActive)
                     """;
 
             var createdUserId = await _session.Connection.QuerySingleAsync<string>(
