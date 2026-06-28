@@ -1,3 +1,7 @@
+using System.Text;
+using gym_system.Api.Authentication;
+using gym_system.Application.Common.Authorization;
+using gym_system.Application.AuthUseCase.LoginByPhone;
 using gym_system.Application.CoursesUseCase.Commands;
 using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.InstructorsUseCase.Command.CreateInstructor;
@@ -13,14 +17,57 @@ using gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleSessi
 using gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureScheduleWeek;
 using gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleSession;
 using gym_system.Infrastructures;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()
+    ?? throw new InvalidOperationException("Jwt 設定缺少");
+if (string.IsNullOrWhiteSpace(jwtSettings.SecretKey) || Encoding.UTF8.GetByteCount(jwtSettings.SecretKey) < 32)
+{
+    throw new InvalidOperationException("Jwt:SecretKey 至少需要 32 bytes");
+}
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwtSettings.Audience,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
+            ClockSkew = TimeSpan.FromMinutes(1),
+            NameClaimType = "name",
+            RoleClaimType = "role"
+        };
+    });
+builder.Services.AddAuthorization();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 /* SQL Connection */
 builder.Services.AddInfrastructureSql();
+builder.Services.AddScoped<IAccessTokenGenerator, JwtAccessTokenGenerator>();
+builder.Services.AddScoped<IUserPermissionService, UserPermissionService>();
+builder.Services.AddScoped<LoginByPhoneHandler>();
 builder.Services.AddScoped<CreateInstructorHandler>();
 builder.Services.AddScoped<UpdateInstructorHandler>();
 builder.Services.AddScoped<GetInstructorsListHandler>();
@@ -51,6 +98,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors("Frontend");
+
+app.UseAuthentication();
 
 app.UseAuthorization();
 

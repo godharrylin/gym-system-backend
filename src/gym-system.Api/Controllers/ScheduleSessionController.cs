@@ -1,9 +1,12 @@
+using System.IdentityModel.Tokens.Jwt;
 using gym_system.Api.Contracts.ScheduleRules;
 using gym_system.Api.Contracts.ScheduleSessions;
+using gym_system.Application.Common;
 using gym_system.Application.ScheduleSessionsUseCase.Command.CancelScheduleSession;
 using gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleSession;
 using gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureScheduleWeek;
 using gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleSession;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Globalization;
 
@@ -51,8 +54,15 @@ namespace gym_system.Api.Controllers
         /// <param name="ct"></param>
         /// <returns></returns>
         [HttpPost("{id}")]
+        [Authorize]
         public async Task<ActionResult<bool>> UpdateScheduleAsync([FromRoute] string id, [FromBody] ScheduleSessionRequest req, CancellationToken ct)
         {
+            var operatorId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+            if (string.IsNullOrWhiteSpace(operatorId))
+            {
+                return Unauthorized(new { message = "Token 缺少使用者識別" });
+            }
+
             var cmd = new UpdateScheduleSessionCommand
             {
                 SessionId = id.Trim(),
@@ -62,10 +72,18 @@ namespace gym_system.Api.Controllers
                 StartTime = req.startTime,
                 Status = req.status,
                 IsFree = req.isFree,
-                OperatorId = req.operatorId?.Trim(),
+                OperatorId = operatorId.Trim(),
                 Remark = req.remark?.Trim()
             };
-            return Ok(await _updateScheduleSessionHandler.Handle(cmd, ct));
+
+            try
+            {
+                return Ok(await _updateScheduleSessionHandler.Handle(cmd, ct));
+            }
+            catch (ForbiddenException)
+            {
+                return Forbid();
+            }
         }
 
         /// <summary>

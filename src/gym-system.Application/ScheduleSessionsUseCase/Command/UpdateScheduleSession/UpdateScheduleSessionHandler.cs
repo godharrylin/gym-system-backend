@@ -1,3 +1,5 @@
+using gym_system.Application.Common;
+using gym_system.Application.Common.Authorization;
 using gym_system.Application.ScheduleSessionsUseCase.Command;
 using gym_system.Domain.Entities.Courses;
 using gym_system.Domain.Entities.ScheduleSessions;
@@ -13,6 +15,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
         private readonly ICourseRepository _courseRepository;
         private readonly IUserRepository _userRepository;
         private readonly IUserRoleRepository _roleRepository;
+        private readonly IUserPermissionService _userPermissionService;
         private readonly IScheduleSessionLogRepository _scheduleSessionLogRepository;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IClock _clock;
@@ -24,6 +27,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
             IClock clock,
             IUserRepository userRepository,
             IUserRoleRepository roleRepository,
+            IUserPermissionService userPermissionService,
             IScheduleSessionLogRepository scheduleSessionLogRepository)
         {
             _scheduleSessionRepository = scheduleSessionRepository;
@@ -32,6 +36,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
             _clock = clock;
             _userRepository = userRepository;
             _roleRepository = roleRepository;
+            _userPermissionService = userPermissionService;
             _scheduleSessionLogRepository = scheduleSessionLogRepository;
         }
 
@@ -47,6 +52,11 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
         {
             if (string.IsNullOrWhiteSpace(cmd.SessionId))
                 throw new ArgumentException("排課 ID 不可為空");
+
+            await _userPermissionService.EnsureHasAnyRoleAsync(
+                cmd.OperatorId,
+                [UserRoleCode.Admin, UserRoleCode.Staff],
+                ct);
 
             await _unitOfWork.BeginAsync(ct);
             try
@@ -214,5 +224,6 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
 
             return value.Trim();
         }
+
     }
 }
