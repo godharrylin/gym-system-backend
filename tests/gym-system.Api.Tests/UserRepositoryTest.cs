@@ -36,7 +36,7 @@ namespace gym_system.Api.Tests
             _output = output;
         }
 
-        [Fact]
+        [SqlServerFact]
         public async Task GetExistingPhoneAsync_Test()
         {
             using var scope = _sp.CreateAsyncScope();
@@ -71,13 +71,14 @@ namespace gym_system.Api.Tests
             }
         }
 
-        [Fact]
+        [SqlServerFact]
         public async Task FindUserByPhone_Test()
         {
             using var scope = _sp.CreateAsyncScope();
             var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
             CancellationToken ct = new CancellationToken();
             var user = await userRepo.FindUserByPhoneAsync("0900000000", ct);
+            Assert.NotNull(user);
             _output.WriteLine($"User Id:{user.Id}, Phone: {user.Phone}, isactive: {user.IsActive}");
 
         }

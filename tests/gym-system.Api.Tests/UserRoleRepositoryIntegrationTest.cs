@@ -37,7 +37,7 @@ public sealed class UserRoleRepositoryIntegrationTests
         _output = output;
     }
 
-    [Fact]
+    [SqlServerFact]
     public async Task GetUserRoleAsync_ShouldGetTheRole()
     {
         //  給個測試的UserID
@@ -46,7 +46,7 @@ public sealed class UserRoleRepositoryIntegrationTests
         var getRole = await GetUserRoleAsync_Test(userId, UserRoleCode.Instructor, ct);
         _output.WriteLine($"getRole: ID={getRole?.UserId} ,Role={getRole?.RoleCode}, AssignedAt={getRole?.AssignedAt}");
     }
-    [Fact]
+    [SqlServerFact]
     public async Task GetUserRoleAsync_ShouldNotGetTheRole()
     {
         //  給個測試的UserID
@@ -55,7 +55,7 @@ public sealed class UserRoleRepositoryIntegrationTests
         var getRole = await GetUserRoleAsync_Test(userId, UserRoleCode.Instructor, ct);
         _output.WriteLine($"getRole: ID={getRole?.UserId} ,Role={getRole?.RoleCode}, AssignedAt={getRole?.AssignedAt}");
     }
-    [Fact]
+    [SqlServerFact]
     public async Task AddRoleAsync_Test_CanAdd()
     {
         using var scope = _sp.CreateScope();
@@ -66,7 +66,7 @@ public sealed class UserRoleRepositoryIntegrationTests
         var role = UserRole.Assign("U00008", UserRoleCode.Instructor, DateTime.UtcNow, true);
         var isSuccess = await roleRepo.AddRoleAsync(role, ct);
     }
-    [Fact]
+    [SqlServerFact]
     public async Task ReactiveRole_ShouldSuccess()
     {
         using var scope = _sp.CreateScope();

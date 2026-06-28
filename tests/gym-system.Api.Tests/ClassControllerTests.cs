@@ -1,6 +1,6 @@
-using gym_system.Api.Contracts.Classes;
+using gym_system.Api.Contracts.Courses;
 using gym_system.Api.Controllers;
-using gym_system.Application.ClassesUseCase.Queries;
+using gym_system.Application.CoursesUseCase.Queries;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
 
@@ -29,9 +29,9 @@ namespace gym_system.Api.Tests
             };
 
             var handler = new GetCoursesListHandler(fake);
-            var sut = new ClassController(handler);
+            var sut = new CourseController(handler, null!, null!);
 
-            var action = await sut.GetClassesAsync(includeInactive: false, CancellationToken.None);
+            var action = await sut.GetCoursesAsync(includeInactive: false, CancellationToken.None);
             var ok = Assert.IsType<OkObjectResult>(action.Result);
             var response = Assert.IsType<GetCourseResponse>(ok.Value);
             var item = Assert.Single(response.CoursesInfoList!);
@@ -50,9 +50,9 @@ namespace gym_system.Api.Tests
         {
             var fake = new FakeClassCatalogQueryService();
             var handler = new GetCoursesListHandler(fake);
-            var sut = new ClassController(handler);
+            var sut = new CourseController(handler, null!, null!);
 
-            await sut.GetClassesAsync(includeInactive: true, CancellationToken.None);
+            await sut.GetCoursesAsync(includeInactive: true, CancellationToken.None);
 
             Assert.True(fake.LastIncludeInactive);
         }
@@ -66,9 +66,9 @@ namespace gym_system.Api.Tests
             };
 
             var handler = new GetCoursesListHandler(fake);
-            var sut = new ClassController(handler);
+            var sut = new CourseController(handler, null!, null!);
 
-            var action = await sut.GetClassesAsync(includeInactive: null, CancellationToken.None);
+            var action = await sut.GetCoursesAsync(includeInactive: null, CancellationToken.None);
             var ok = Assert.IsType<OkObjectResult>(action.Result);
             var response = Assert.IsType<GetCourseResponse>(ok.Value);
 
