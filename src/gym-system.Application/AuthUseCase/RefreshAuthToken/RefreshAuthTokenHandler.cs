@@ -1,15 +1,15 @@
 using gym_system.Application.AuthUseCase.Tokens;
 using gym_system.Domain.Repositories;
 
-namespace gym_system.Application.AuthUseCase.LoginByPhone
+namespace gym_system.Application.AuthUseCase.RefreshAuthToken
 {
-    public sealed class LoginByPhoneHandler
+    public sealed class RefreshAuthTokenHandler
     {
         private readonly IUserRepository _userRepository;
         private readonly IUserRoleRepository _userRoleRepository;
         private readonly IAuthTokenGenerator _authTokenGenerator;
 
-        public LoginByPhoneHandler(
+        public RefreshAuthTokenHandler(
             IUserRepository userRepository,
             IUserRoleRepository userRoleRepository,
             IAuthTokenGenerator authTokenGenerator)
@@ -19,15 +19,14 @@ namespace gym_system.Application.AuthUseCase.LoginByPhone
             _authTokenGenerator = authTokenGenerator;
         }
 
-        public async Task<LoginByPhoneResult> Handle(LoginByPhoneCommand command, CancellationToken ct = default)
+        public async Task<RefreshAuthTokenResult> Handle(RefreshAuthTokenCommand command, CancellationToken ct = default)
         {
-            if (string.IsNullOrWhiteSpace(command.Phone))
+            if (string.IsNullOrWhiteSpace(command.UserId))
             {
-                throw new InvalidOperationException("手機號碼必填");
+                throw new InvalidOperationException("使用者識別必填");
             }
 
-            var phone = command.Phone.Trim();
-            var user = await _userRepository.FindUserByPhoneAsync(phone, ct)
+            var user = await _userRepository.FindUserByIdAsync(command.UserId.Trim(), ct)
                 ?? throw new InvalidOperationException("使用者不存在");
 
             if (!user.IsActive)
@@ -41,13 +40,13 @@ namespace gym_system.Application.AuthUseCase.LoginByPhone
 
             var tokens = _authTokenGenerator.Generate(user, roles);
 
-            return new LoginByPhoneResult
+            return new RefreshAuthTokenResult
             {
                 AccessToken = tokens.AccessToken,
                 AccessTokenExpiresAt = tokens.AccessTokenExpiresAt,
                 RefreshToken = tokens.RefreshToken,
                 RefreshTokenExpiresAt = tokens.RefreshTokenExpiresAt,
-                User = new LoginUserResult
+                User = new RefreshUserResult
                 {
                     Id = user.Id,
                     Name = user.Name,

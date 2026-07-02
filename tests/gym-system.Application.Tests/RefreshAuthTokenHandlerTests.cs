@@ -1,4 +1,4 @@
-using gym_system.Application.AuthUseCase.LoginByPhone;
+using gym_system.Application.AuthUseCase.RefreshAuthToken;
 using gym_system.Application.AuthUseCase.Tokens;
 using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Enums;
@@ -7,10 +7,10 @@ using Xunit;
 
 namespace gym_system.Application.Tests
 {
-    public sealed class LoginByPhoneHandlerTests
+    public sealed class RefreshAuthTokenHandlerTests
     {
         [Fact]
-        public async Task Handle_ShouldReturnTokenAndUser_WhenPhoneExistsAndUserIsActive()
+        public async Task Handle_ShouldReturnNewTokensAndLatestRoles_WhenUserIsActive()
         {
             var sut = CreateSut();
             sut.UserRepository.Users.Add(User.Rehydrate(
@@ -21,25 +21,25 @@ namespace gym_system.Application.Tests
                 true));
             sut.RoleRepository.Roles.Add(UserRole.Assign(
                 "U0000000001",
-                UserRoleCode.Admin,
+                UserRoleCode.Staff,
                 new DateTime(2026, 6, 28),
                 true));
 
-            var result = await sut.Handler.Handle(new LoginByPhoneCommand { Phone = " 0912345678 " });
+            var result = await sut.Handler.Handle(new RefreshAuthTokenCommand { UserId = "U0000000001" });
 
             Assert.Equal("fake.jwt.token", result.AccessToken);
+            Assert.Equal("fake.refresh.token", result.RefreshToken);
             Assert.Equal("U0000000001", result.User.Id);
-            Assert.Equal("0912345678", result.User.Phone);
-            Assert.Contains("Admin", result.User.Roles);
+            Assert.Contains("Staff", result.User.Roles);
         }
 
         [Fact]
-        public async Task Handle_ShouldThrow_WhenPhoneIsEmpty()
+        public async Task Handle_ShouldThrow_WhenUserIdIsEmpty()
         {
             var sut = CreateSut();
 
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => sut.Handler.Handle(new LoginByPhoneCommand { Phone = "" }));
+                () => sut.Handler.Handle(new RefreshAuthTokenCommand { UserId = "" }));
         }
 
         [Fact]
@@ -48,7 +48,7 @@ namespace gym_system.Application.Tests
             var sut = CreateSut();
 
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => sut.Handler.Handle(new LoginByPhoneCommand { Phone = "0912345678" }));
+                () => sut.Handler.Handle(new RefreshAuthTokenCommand { UserId = "U0000000001" }));
         }
 
         [Fact]
@@ -63,21 +63,21 @@ namespace gym_system.Application.Tests
                 false));
 
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => sut.Handler.Handle(new LoginByPhoneCommand { Phone = "0912345678" }));
+                () => sut.Handler.Handle(new RefreshAuthTokenCommand { UserId = "U0000000001" }));
         }
 
         private static SutBundle CreateSut()
         {
             var userRepository = new FakeUserRepository();
             var roleRepository = new FakeUserRoleRepository();
-            var tokenGenerator = new FakeAccessTokenGenerator();
-            var handler = new LoginByPhoneHandler(userRepository, roleRepository, tokenGenerator);
+            var tokenGenerator = new FakeAuthTokenGenerator();
+            var handler = new RefreshAuthTokenHandler(userRepository, roleRepository, tokenGenerator);
 
             return new SutBundle(handler, userRepository, roleRepository);
         }
 
         private sealed record SutBundle(
-            LoginByPhoneHandler Handler,
+            RefreshAuthTokenHandler Handler,
             FakeUserRepository UserRepository,
             FakeUserRoleRepository RoleRepository);
 
@@ -155,7 +155,7 @@ namespace gym_system.Application.Tests
             }
         }
 
-        private sealed class FakeAccessTokenGenerator : IAuthTokenGenerator
+        private sealed class FakeAuthTokenGenerator : IAuthTokenGenerator
         {
             public AuthTokenResult Generate(User user, IReadOnlyList<string> roles)
             {

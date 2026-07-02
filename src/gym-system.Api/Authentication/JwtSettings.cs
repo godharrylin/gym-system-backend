@@ -8,5 +8,6 @@ namespace gym_system.Api.Authentication
         public string Audience { get; init; } = string.Empty;
         public string SecretKey { get; init; } = string.Empty;
         public int ExpiresMinutes { get; init; } = 60;
+        public int RefreshExpiresDays { get; init; } = 14;
     }
 }

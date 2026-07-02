@@ -1,7 +1,9 @@
 using System.Text;
 using gym_system.Api.Authentication;
-using gym_system.Application.Common.Authorization;
 using gym_system.Application.AuthUseCase.LoginByPhone;
+using gym_system.Application.AuthUseCase.RefreshAuthToken;
+using gym_system.Application.AuthUseCase.Tokens;
+using gym_system.Application.Common.Authorization;
 using gym_system.Application.CoursesUseCase.Commands;
 using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.InstructorsUseCase.Command.CreateInstructor;
@@ -51,6 +53,18 @@ builder.Services
             NameClaimType = "name",
             RoleClaimType = "role"
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                if (context.Principal?.FindFirst("token_type")?.Value != "access")
+                {
+                    context.Fail("Only access tokens can call protected APIs.");
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 builder.Services.AddAuthorization();
 builder.Services.AddCors(options =>
@@ -65,9 +79,11 @@ builder.Services.AddCors(options =>
 });
 /* SQL Connection */
 builder.Services.AddInfrastructureSql();
-builder.Services.AddScoped<IAccessTokenGenerator, JwtAccessTokenGenerator>();
+builder.Services.AddScoped<IAuthTokenGenerator, JwtAuthTokenGenerator>();
+builder.Services.AddScoped<IRefreshTokenValidator, JwtRefreshTokenValidator>();
 builder.Services.AddScoped<IUserPermissionService, UserPermissionService>();
 builder.Services.AddScoped<LoginByPhoneHandler>();
+builder.Services.AddScoped<RefreshAuthTokenHandler>();
 builder.Services.AddScoped<CreateInstructorHandler>();
 builder.Services.AddScoped<UpdateInstructorHandler>();
 builder.Services.AddScoped<GetInstructorsListHandler>();
