@@ -1,5 +1,6 @@
 namespace gym_system.Domain.Entities.Orders
 {
+    //  訂單明細
     public sealed class OrderItem
     {
         private OrderItem(

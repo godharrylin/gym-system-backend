@@ -18,6 +18,7 @@ using gym_system.Application.ScheduleSessionsUseCase.Command.CancelScheduleSessi
 using gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleSession;
 using gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureScheduleWeek;
 using gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleSession;
+using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Infrastructures;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -98,6 +99,8 @@ builder.Services.AddScoped<GetOrEnsureScheduleWeekHandler>();
 builder.Services.AddScoped<UpdateScheduleSessionHandler>();
 builder.Services.AddScoped<CreateScheduleSessionHandler>();
 builder.Services.AddScoped<CancelScheduleSessionHandler>();
+builder.Services.AddScoped<GetPurchasableTicketPlansForStudentHandler>();
+builder.Services.AddScoped<ITicketPlanEligibilityService, TicketPlanEligibilityService>();
 /* Mock Connection */
 //builder.Services.AddScoped<RegisterMemberHandler>();
 //builder.Services.AddInfrastructureInMemory();
