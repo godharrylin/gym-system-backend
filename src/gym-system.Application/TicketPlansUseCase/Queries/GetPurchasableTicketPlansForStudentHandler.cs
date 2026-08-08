@@ -21,11 +21,17 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
             }
 
             var ticketPlans = await _ticketPlanCatalogQueryService.GetActiveTicketPlansAsync(ct);
+            var context = await _ticketPlanEligibilityService.GetEligibilityContextAsync(studentId, ct);
+            if (context is null)
+            {
+                return [];
+            }
+
             var purchasablePlans = new List<TicketPlanResult>();
 
             foreach (var ticketPlan in ticketPlans)
             {
-                if (await _ticketPlanEligibilityService.CanPurchaseAsync(studentId, ticketPlan, ct))
+                if (await _ticketPlanEligibilityService.CanPurchaseAsync(context, ticketPlan, ct))
                 {
                     purchasablePlans.Add(ticketPlan);
                 }

@@ -101,6 +101,7 @@ builder.Services.AddScoped<CreateScheduleSessionHandler>();
 builder.Services.AddScoped<CancelScheduleSessionHandler>();
 builder.Services.AddScoped<GetPurchasableTicketPlansForStudentHandler>();
 builder.Services.AddScoped<ITicketPlanEligibilityService, TicketPlanEligibilityService>();
+builder.Services.AddScoped<ITicketPlanEligibilityRule, NewOnlyTicketPlanEligibilityRule>();
 /* Mock Connection */
 //builder.Services.AddScoped<RegisterMemberHandler>();
 //builder.Services.AddInfrastructureInMemory();
@@ -119,4 +120,3 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-

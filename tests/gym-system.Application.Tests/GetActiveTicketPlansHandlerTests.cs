@@ -1,4 +1,4 @@
-﻿using gym_system.Application.TicketPlansUseCase.Queries;
+using gym_system.Application.TicketPlansUseCase.Queries;
 using Xunit;
 
 namespace gym_system.Application.Tests
@@ -21,6 +21,7 @@ namespace gym_system.Application.Tests
                         Sessions = 1,
                         Type = "SESSION",
                         Tags = [],
+                        EligibilityRuleCodes = [],
                         Description = "任何人皆可購買"
                     }
                 ]

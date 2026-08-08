@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -25,12 +25,15 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
         /// 可使用堂數
         /// </summary>
         public int Sessions { get; set; }
-        
+
         /// <summary>
         /// 票券方案標籤，用來控制畫面顯示
         /// </summary>
-        public string[]? Tags { get; set; } = new string[0];
+        public string[] Tags { get; set; } = [];
+        /// <summary>
+        /// 票券資格規則，用於後端判斷是否可購買
+        /// </summary>
+        public string[] EligibilityRuleCodes { get; set; } = [];
         public string? Description { get; set; }
-        
     }
 }

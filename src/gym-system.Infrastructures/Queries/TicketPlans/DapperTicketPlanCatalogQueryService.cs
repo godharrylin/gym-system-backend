@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Infrastructures.Connections;
 using Microsoft.EntityFrameworkCore.Update.Internal;
@@ -31,7 +31,11 @@ namespace gym_system.Infrastructures.Queries.TicketPlans
                     COALESCE(
                         '[' + STRING_AGG('"' + r.plan_rule_code + '"', ',') + ']',
                         '[]'
-                    ) AS Tags
+                    ) AS Tags,
+                    COALESCE(
+                        '[' + STRING_AGG('"' + r.plan_rule_code + '"', ',') + ']',
+                        '[]'
+                    ) AS EligibilityRuleCodes
                 FROM dbo.ticket_plan_kind k
                 LEFT JOIN dbo.ticket_plan_kind_rule kr
                     ON kr.ticket_plan_kind_sn = k.ticket_plan_kind_sn
@@ -56,7 +60,6 @@ namespace gym_system.Infrastructures.Queries.TicketPlans
                 var rows = await conn.QueryAsync<TicketPlanResult>(command);
                 return rows.AsList();
             }
-                
         }
     }
 }

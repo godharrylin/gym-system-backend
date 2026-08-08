@@ -69,6 +69,7 @@ namespace gym_system.Infrastructures
             DapperConfig.Register();
             services.AddScoped<ICourseCatalogQueryService, DapperCourseCatalogQueryService>();
             services.AddScoped<IScheduleRulesQueryService, DapperGetScheduleRulesQueryService>();
+            services.AddScoped<IStudentTicketPurchaseHistoryQueryService, DapperStudentTicketPurchaseHistoryQueryService>();
             return services;
         }
     }
