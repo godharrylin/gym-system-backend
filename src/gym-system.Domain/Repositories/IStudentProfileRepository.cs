@@ -9,5 +9,6 @@ namespace gym_system.Domain.Repositories
         Task<StudentProfile?> FindByUserIdAsync(string userId, CancellationToken ct);
         Task<bool> UpdateLastVisitAsync(string userId, DateTime lastVisitAt, CancellationToken ct);
         Task<bool> UpdateCurrentTicketAsync(string userId, CurrentTicketSnapshot snapshot, CancellationToken ct);
+        Task<bool> ClearCurrentTicketAsync(string userId, DateTime updatedAt, CancellationToken ct);
     }
 }

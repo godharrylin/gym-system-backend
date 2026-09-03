@@ -12,15 +12,15 @@
         /// <summary>
         /// 票券單價
         /// </summary>
-        public required string Price { get; set; } 
+        public decimal Price { get; set; }
         /// <summary>
         /// 到期天數
         /// </summary>
-        public int Days { get; set; }
+        public int? Days { get; set; }
         /// <summary>
         /// 可使用堂數
         /// </summary>
-        public string? Sessions { get; set; }   //  "UNLIMITED" or "10"
+        public int? Sessions { get; set; }
         /// <summary>
         /// 票券類別，堂票或月票
         /// </summary>
@@ -29,6 +29,8 @@
         /// 票券方案標籤，用來控制畫面顯示
         /// </summary>
         public string[]? Tags { get; set; }
+        public string? FamilyCode { get; set; }
+        public required string PurchaseKind { get; set; }
         public string? Description { get; set; }
     }
 }

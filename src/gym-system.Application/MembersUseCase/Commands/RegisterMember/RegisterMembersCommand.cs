@@ -18,7 +18,7 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
     public sealed class TicketPurchaseInput
     {
         public string TicketPlanKindId { get; init; } = string.Empty;
-        public DateOnly ActivationDate { get; init; }
+        public int Quantity { get; init; } = 1;
         public PaymentState PaymentStatus { get; init; }
     }
 }

@@ -8,12 +8,16 @@ namespace gym_system.Domain.Entities.Orders
             string orderId,
             OrderItemType type,
             string refId,
+            string name,
             decimal unitPrice,
             decimal totalAmount,
             decimal actualAmount,
             UnitType quantityUnit,
             int quantity,
             int bonusQuantity,
+            UnitType? bonusUnit,
+            string? discountType,
+            decimal? discountRate,
             OrderItemPaymentMethod paymentMethod,
             OrderItemPaymentState paymentState,
             DateTime buyAt)
@@ -22,103 +26,89 @@ namespace gym_system.Domain.Entities.Orders
             OrderId = orderId;
             Type = type;
             RefId = refId;
+            Name = name;
             UnitPrice = unitPrice;
             TotalAmount = totalAmount;
             ActualAmount = actualAmount;
             QuantityUnit = quantityUnit;
             Quantity = quantity;
             BonusQuantity = bonusQuantity;
+            BonusUnit = bonusUnit;
+            DiscountType = discountType;
+            DiscountRate = discountRate;
             PaymentMethod = paymentMethod;
             PaymentState = paymentState;
             BuyAt = buyAt;
+            PaidAt = paymentState == OrderItemPaymentState.Paid ? buyAt : null;
         }
 
-        /// <summary>
-        /// 訂單明細流水號
-        /// </summary>
         public string Id { get; }
-        /// <summary>
-        /// 訂單流水號
-        /// </summary>
         public string OrderId { get; }
-        /// <summary>
-        /// 訂單類別
-        /// </summary>
         public OrderItemType Type { get; }
-        /// <summary>
-        /// 訂單品項識別碼，用於識別訂單中實際購買之票券或產品的唯一識別碼
-        /// </summary>
-        public string RefId {  get; }
+        public string RefId { get; }
+        public string Name { get; }
         public OrderItemPaymentMethod PaymentMethod { get; }
-        /// <summary>
-        /// 單價
-        /// </summary>
-        public decimal UnitPrice {  get; }
-        /// <summary>
-        /// 應付金額
-        /// </summary>
+        public decimal UnitPrice { get; }
         public decimal TotalAmount { get; }
-        /// <summary>
-        /// 實收金額
-        /// </summary>
         public decimal ActualAmount { get; }
-        /// <summary>
-        /// 數量單位種類
-        /// </summary>
         public UnitType QuantityUnit { get; }
-        /// <summary>
-        /// 購買數量
-        ///• 月票 → 單位是天
-        ///• 堂票 → 單位是堂
-        ///• 商品 → 單位是個
-        /// </summary>
         public int Quantity { get; }
-        /// <summary>
-        /// 贈送數量
-        ///• 月票 → 單位是天
-        ///• 堂票 → 單位是堂
-        ///• 商品 → 單位是個
-        /// </summary>
         public int BonusQuantity { get; }
-        /// <summary>
-        /// 總數量 (業務邏輯需要，不需映射到資料庫)
-        /// </summary>
-        public int TotalQuantity => Quantity + BonusQuantity;
-        public OrderItemPaymentState PaymentState { get; }
+        public UnitType? BonusUnit { get; }
+        public string? DiscountType { get; }
+        public decimal? DiscountRate { get; }
+        public int TotalQuantity => Quantity;
+        public OrderItemPaymentState PaymentState { get; private set; }
         public DateTime BuyAt { get; }
+        public DateTime? PaidAt { get; private set; }
 
-        /// <summary>
-        /// 建立票券訂單明細
-        /// </summary>
-        /// <param name="id"></param>
-        /// <param name="orderId"></param>
-        /// <param name="ticketPlanKindId"></param>
-        /// <param name="unitPrice"></param>
-        /// <param name="totalAmount"></param>
-        /// <param name="actualAmount"></param>
-        /// <param name="quantity"></param>
-        /// <param name="bonusQuantity"></param>
-        /// <param name="paymentState"></param>
-        /// <param name="buyAt"></param>
-        /// <returns></returns>
         public static OrderItem CreateTicketItem(
             string id,
             string orderId,
             string ticketPlanKindId,
+            string ticketPlanKindName,
             decimal unitPrice,
             decimal totalAmount,
             decimal actualAmount,
             UnitType quantityUnit,
             int quantity,
             int bonusQuantity,
+            UnitType? bonusUnit,
+            string? discountType,
+            decimal? discountRate,
             OrderItemPaymentMethod paymentMethod,
             OrderItemPaymentState paymentState,
             DateTime buyAt)
         {
             return new OrderItem(
-                id, orderId, OrderItemType.Ticket, ticketPlanKindId, 
-                unitPrice, totalAmount, actualAmount, quantityUnit, quantity, 
-                bonusQuantity, paymentMethod, paymentState, buyAt);
+                id,
+                orderId,
+                OrderItemType.Ticket,
+                ticketPlanKindId,
+                ticketPlanKindName,
+                unitPrice,
+                totalAmount,
+                actualAmount,
+                quantityUnit,
+                quantity,
+                bonusQuantity,
+                bonusUnit,
+                discountType,
+                discountRate,
+                paymentMethod,
+                paymentState,
+                buyAt);
+        }
+
+        public void MarkPaid(DateTime paidAt)
+        {
+            if (PaymentState != OrderItemPaymentState.UnPaid)
+            {
+                throw new InvalidOperationException("只有未付款訂單明細可以付款");
+            }
+
+            PaymentState = OrderItemPaymentState.Paid;
+            PaidAt = paidAt;
         }
     }
 
@@ -127,6 +117,7 @@ namespace gym_system.Domain.Entities.Orders
         Ticket,
         Product
     }
+
     public enum OrderItemPaymentState
     {
         Paid = 1,
@@ -139,7 +130,6 @@ namespace gym_system.Domain.Entities.Orders
         Cash
     }
 
-    
     public enum UnitType
     {
         Days,

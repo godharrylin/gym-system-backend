@@ -5,6 +5,10 @@ namespace gym_system.Domain.Entities.Tickets
         public string Id { get; init; } = string.Empty;
         public string Name { get; init; } = string.Empty;
         /// <summary>
+        /// 續約方案家族。NULL 代表此方案沒有足夠資料參與續約判斷。
+        /// </summary>
+        public string? FamilyCode { get; init; }
+        /// <summary>
         /// 票券類別，堂票或月票
         /// </summary>
         public TicketPlanType Type { get; init; }
@@ -15,11 +19,11 @@ namespace gym_system.Domain.Entities.Tickets
         /// <summary>
         /// 預設額度，堂票使用
         /// </summary>
-        public int DefaultCredit { get; init; }
+        public int? DefaultCredit { get; init; }
         /// <summary>
         /// 預設到期天數
         /// </summary>
-        public int DefaultExpireDays { get; init; }
+        public int? DefaultExpireDays { get; init; }
         public bool IsActive { get; init; }
     }
 

@@ -20,23 +20,46 @@ namespace gym_system.Api.Controllers
         {
             IReadOnlyList<TicketPlanResult> result = await _ticketPlanQueryService.GetActiveTicketPlansAsync(ct);
 
-            //  在這裡轉成前端需要的格式
-            var response = new GetTicketPlansResponse
+            return Ok(MapResponse(result));
+        }
+
+        [HttpGet("registration-purchasable")]
+        public async Task<ActionResult<GetTicketPlansResponse>> GetRegistrationPurchasableAsync(
+            CancellationToken ct)
+        {
+            var result = await _ticketPlanQueryService.GetActiveTicketPlansAsync(ct);
+            var registrationPlans = result
+                .Where(x => !x.EligibilityRuleCodes.Contains(
+                    "RENEWAL",
+                    StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            return Ok(MapResponse(registrationPlans));
+        }
+
+        private static GetTicketPlansResponse MapResponse(
+            IReadOnlyList<TicketPlanResult> result)
+        {
+            return new GetTicketPlansResponse
             {
                 TicketPlans = result.Select(x => new TicketPlanDto
                 {
                     Id = x.Id,
                     Name = x.Name,
-                    Price = x.Price == 0 ? "Free" : $"${x.Price:0}",
+                    Price = x.Price,
                     Days = x.Days,
-                    Sessions = x.Sessions.ToString(),
+                    Sessions = x.Sessions,
                     Type = x.Type,
                     Tags = x.Tags?.ToArray() ?? Array.Empty<string>(),
+                    FamilyCode = x.FamilyCode,
+                    PurchaseKind = x.EligibilityRuleCodes.Contains(
+                        "RENEWAL",
+                        StringComparer.OrdinalIgnoreCase)
+                            ? "RENEWAL"
+                            : "STANDARD",
                     Description = x.Description
                 }).ToList()
             };
-
-            return Ok(response);
         }
     }
 }

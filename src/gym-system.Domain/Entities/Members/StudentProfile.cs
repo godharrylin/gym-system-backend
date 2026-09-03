@@ -49,6 +49,11 @@ namespace gym_system.Domain.Entities.Members
             CurrentTicket = snapshot;
         }
 
+        public void ClearCurrentTicket()
+        {
+            CurrentTicket = null;
+        }
+
         public void RecordVisit(DateTime visitedAt)
         {
             LastVisitAt = visitedAt;

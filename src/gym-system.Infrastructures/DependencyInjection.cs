@@ -1,6 +1,7 @@
 using gym_system.Application.InstructorsUseCase.Queries;
 using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.TicketPlansUseCase.Queries;
+using gym_system.Application.TicketsUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
@@ -12,6 +13,7 @@ using gym_system.Infrastructures.Dapper;
 using gym_system.Infrastructures.Queries.Instructors;
 using gym_system.Infrastructures.Queries.Courses;
 using gym_system.Infrastructures.Queries.TicketPlans;
+using gym_system.Infrastructures.Queries.TicketPasses;
 using Microsoft.Extensions.DependencyInjection;
 using gym_system.Application.ScheduleRulesUseCase.Queries;
 using gym_system.Infrastructures.Queries.ScheduleRules;
@@ -36,6 +38,7 @@ namespace gym_system.Infrastructures
             
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
             services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
+            services.AddScoped<IStudentTicketPassQueryService, DapperStudentTicketPassQueryService>();
 
             return services;
         }
@@ -48,7 +51,11 @@ namespace gym_system.Infrastructures
 
             services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
             services.AddScoped<ITicketPlanCatalogQueryService, DapperTicketPlanCatalogQueryService>();
+            services.AddScoped<IStudentTicketPassQueryService, DapperStudentTicketPassQueryService>();
             services.AddScoped<IStudentProfileRepository, SqlStudentProfileRepository>();
+            services.AddScoped<ITicketPlanRepository, SqlTicketPlanRepository>();
+            services.AddScoped<IOrderRepository, SqlOrderRepository>();
+            services.AddScoped<ITicketPassRepository, SqlTicketPassRepository>();
 
             return services;
         }
@@ -87,16 +94,18 @@ namespace gym_system.Infrastructures
             {
                 Id = "T_001",
                 Name = "Single",
+                FamilyCode = "SINGLE",
                 Type = TicketPlanType.Pack,
                 Price = 250,
                 DefaultCredit = 1,
-                DefaultExpireDays = 1,
+                DefaultExpireDays = null,
                 IsActive = true
             },
             new TicketPlanKind
             {
                 Id = "T_002",
                 Name = "Pack 10",
+                FamilyCode = "PACK_10",
                 Type = TicketPlanType.Pack,
                 Price = 2300,
                 DefaultCredit = 10,
@@ -107,6 +116,7 @@ namespace gym_system.Infrastructures
             {
                 Id = "T_003",
                 Name = "Monthly",
+                FamilyCode = "MONTHLY",
                 Type = TicketPlanType.MPass,
                 Price = 1960,
                 DefaultCredit = 999,
@@ -294,6 +304,17 @@ namespace gym_system.Infrastructures
             profile.UpdateCurrentTicket(snapshot);
             return Task.FromResult(true);
         }
+        public Task<bool> ClearCurrentTicketAsync(string userId, DateTime updatedAt, CancellationToken ct)
+        {
+            var profile = _store.Profiles.FirstOrDefault(x => x.UserId == userId);
+            if (profile is null)
+            {
+                return Task.FromResult(false);
+            }
+
+            profile.ClearCurrentTicket();
+            return Task.FromResult(true);
+        }
     }
 
     internal sealed class InMemoryTicketPlanRepository : ITicketPlanRepository
@@ -321,9 +342,87 @@ namespace gym_system.Infrastructures
             _store = store;
         }
 
-        public Task AddAsync(Order order, CancellationToken ct)
+        public Task<OrderPersistenceResult> AddAsync(Order order, CancellationToken ct)
         {
             _store.Orders.Add(order);
+            var orderSn = _store.Orders.Count;
+            return Task.FromResult(new OrderPersistenceResult
+            {
+                OrderSn = orderSn,
+                OrderId = order.Id,
+                Items = order.Items.Select((item, index) => new OrderItemPersistenceResult
+                {
+                    ClientItemId = item.Id,
+                    OrderItemSn = index + 1,
+                    OrderItemId = item.Id
+                }).ToList()
+            });
+        }
+
+        public Task<UnpaidTicketOrder?> FindUnpaidTicketOrderAsync(
+            string orderId,
+            bool acquireLock,
+            CancellationToken ct)
+        {
+            var orderIndex = _store.Orders.FindIndex(x =>
+                x.Id.Equals(orderId, StringComparison.OrdinalIgnoreCase));
+            if (orderIndex < 0)
+            {
+                return Task.FromResult<UnpaidTicketOrder?>(null);
+            }
+
+            var order = _store.Orders[orderIndex];
+            var items = order.Items
+                .Where(x => x.Type == OrderItemType.Ticket
+                    && x.PaymentState == OrderItemPaymentState.UnPaid)
+                .ToList();
+            if (order.PaymentState != OrderOverallPaymentState.UnPaid || items.Count == 0)
+            {
+                return Task.FromResult<UnpaidTicketOrder?>(null);
+            }
+
+            if (items.Count != 1)
+            {
+                throw new InvalidOperationException("目前只支援單一票券明細的未付款訂單");
+            }
+
+            var item = items[0];
+            return Task.FromResult<UnpaidTicketOrder?>(new UnpaidTicketOrder
+            {
+                OrderSn = orderIndex + 1,
+                OrderId = order.Id,
+                BuyerId = order.BuyerId,
+                OrderItemSn = order.Items.ToList().IndexOf(item) + 1,
+                OrderItemId = item.Id,
+                TicketPlanKindCode = item.RefId,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice,
+                TotalAmount = item.TotalAmount,
+                ActualAmount = item.ActualAmount
+            });
+        }
+
+        public Task MarkPaidAsync(
+            int orderSn,
+            int orderItemSn,
+            DateTime paidAt,
+            string paymentMethod,
+            string operatorId,
+            CancellationToken ct)
+        {
+            if (orderSn <= 0 || orderSn > _store.Orders.Count)
+            {
+                throw new InvalidOperationException("訂單不存在");
+            }
+
+            var order = _store.Orders[orderSn - 1];
+            if (orderItemSn <= 0 || orderItemSn > order.Items.Count)
+            {
+                throw new InvalidOperationException("訂單明細不存在");
+            }
+
+            order.Items[orderItemSn - 1].MarkPaid(paidAt);
+            order.MarkPaid();
             return Task.CompletedTask;
         }
     }
@@ -337,10 +436,183 @@ namespace gym_system.Infrastructures
             _store = store;
         }
 
-        public Task AddRangeAsync(IReadOnlyList<TicketPass> passes, CancellationToken ct)
+        public Task<IReadOnlyList<TicketPassPersistenceResult>> AddRangeAsync(
+            IReadOnlyList<TicketPass> passes,
+            OrderPersistenceResult orderPersistence,
+            CancellationToken ct)
         {
             _store.Passes.AddRange(passes);
-            return Task.CompletedTask;
+            IReadOnlyList<TicketPassPersistenceResult> result = passes.Select((pass, index) => new TicketPassPersistenceResult
+            {
+                ClientPassId = pass.Id,
+                OwnerId = pass.OwnerId,
+                PassSn = index + 1,
+                PassId = pass.Id
+            }).ToList();
+            return Task.FromResult(result);
+        }
+
+        public Task<RenewalSourcePass?> FindLatestRenewalSourceAsync(
+            string ownerId,
+            string familyCode,
+            bool acquireLock,
+            CancellationToken ct)
+        {
+            var candidates = _store.Passes
+                .Select((pass, index) => new { Pass = pass, PassSn = index + 1 })
+                .Where(x => x.Pass.OwnerId.Equals(ownerId, StringComparison.OrdinalIgnoreCase)
+                    && x.Pass.PaymentState == PaymentState.Paid
+                    && x.Pass.ValidStatus is TicketValidStatus.Active
+                        or TicketValidStatus.Expire
+                        or TicketValidStatus.Depleted
+                    && x.Pass.ValidStartDate is not null
+                    && !string.IsNullOrWhiteSpace(x.Pass.Plan.FamilyCode)
+                    && x.Pass.Plan.FamilyCode.Equals(familyCode, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.Pass.ValidStartDate)
+                .ThenByDescending(x => x.PassSn)
+                .ToList();
+            var candidate = candidates.FirstOrDefault();
+            if (candidate is null)
+            {
+                return Task.FromResult<RenewalSourcePass?>(null);
+            }
+
+            var children = _store.Passes
+                .Where(x => x.RenewedFromPassSn == candidate.PassSn)
+                .ToList();
+            var cancelledChildren = children
+                .Where(x => x.ValidStatus == TicketValidStatus.Cancelled)
+                .ToList();
+            return Task.FromResult<RenewalSourcePass?>(new RenewalSourcePass
+            {
+                PassSn = candidate.PassSn,
+                FamilyCode = candidate.Pass.Plan.FamilyCode!,
+                ValidStatus = candidate.Pass.ValidStatus,
+                ValidStartDate = candidate.Pass.ValidStartDate,
+                ValidEndDate = candidate.Pass.ValidEndDate,
+                EndedAt = candidate.Pass.EndedAt,
+                EndReason = candidate.Pass.EndReason,
+                HasNonCancelledRenewal = children.Any(x => x.ValidStatus != TicketValidStatus.Cancelled),
+                HasCancelledRenewal = cancelledChildren.Count > 0,
+                LastCancelledRenewalAt = cancelledChildren.Max(x => x.EndedAt)
+            });
+        }
+
+        public Task<bool> HasQueuedPassAsync(string ownerId, CancellationToken ct)
+        {
+            return Task.FromResult(_store.Passes.Any(x =>
+                x.OwnerId.Equals(ownerId, StringComparison.OrdinalIgnoreCase)
+                && x.PaymentState == PaymentState.Paid
+                && x.ValidStatus == TicketValidStatus.UnActive));
+        }
+
+        public Task LockOwnerAsync(string ownerId, CancellationToken ct) =>
+            Task.CompletedTask;
+
+        public Task<CancelledTicketPassResult?> CancelQueuedRenewalAsync(
+            string passId,
+            DateTime cancelledAt,
+            string operatorId,
+            CancellationToken ct)
+        {
+            var item = _store.Passes
+                .Select((pass, index) => new { Pass = pass, PassSn = index + 1 })
+                .FirstOrDefault(x => x.Pass.Id.Equals(passId, StringComparison.OrdinalIgnoreCase));
+            if (item is null)
+            {
+                return Task.FromResult<CancelledTicketPassResult?>(null);
+            }
+
+            item.Pass.Cancel(cancelledAt);
+            return Task.FromResult<CancelledTicketPassResult?>(new CancelledTicketPassResult
+            {
+                PassId = item.Pass.Id,
+                OwnerId = item.Pass.OwnerId,
+                SourcePassSn = item.Pass.RenewedFromPassSn!.Value
+            });
+        }
+        public Task<CurrentTicketSnapshot?> ReconcileCurrentAsync(
+            string ownerId,
+            DateOnly today,
+            DateTime updatedAt,
+            string operatorId,
+            CancellationToken ct)
+        {
+            var ownerPasses = _store.Passes
+                .Select((pass, index) => new { Pass = pass, PassSn = index + 1 })
+                .Where(x => x.Pass.OwnerId.Equals(ownerId, StringComparison.OrdinalIgnoreCase)
+                    && x.Pass.PaymentState == PaymentState.Paid)
+                .ToList();
+            foreach (var item in ownerPasses)
+            {
+                item.Pass.RefreshStatus(today);
+            }
+
+            var active = ownerPasses
+                .Where(x => x.Pass.ValidStatus == TicketValidStatus.Active)
+                .ToList();
+            if (active.Count > 1)
+            {
+                throw new InvalidOperationException($"學生 {ownerId} 同時存在多張 Active 票券");
+            }
+
+            while (active.Count == 0)
+            {
+                var next = ownerPasses
+                    .Where(x => x.Pass.ValidStatus == TicketValidStatus.UnActive)
+                    .OrderBy(x => x.Pass.RenewedFromPassSn is null ? 1 : 0)
+                    .ThenBy(x => x.Pass.PaidAt ?? DateTime.MinValue)
+                    .ThenBy(x => x.PassSn)
+                    .FirstOrDefault(x =>
+                    {
+                        if (x.Pass.RenewedFromPassSn is null)
+                        {
+                            return true;
+                        }
+
+                        var sourceIndex = x.Pass.RenewedFromPassSn.Value - 1;
+                        return sourceIndex >= 0
+                            && sourceIndex < _store.Passes.Count
+                            && _store.Passes[sourceIndex].ValidStatus is TicketValidStatus.Expire
+                                or TicketValidStatus.Depleted;
+                    });
+                if (next is not null)
+                {
+                    var activationDate = today;
+                    if (next.Pass.RenewedFromPassSn is int sourcePassSn)
+                    {
+                        var source = _store.Passes[sourcePassSn - 1];
+                        var sourceEndDate = source.EndReason == TicketEndReason.Depleted
+                            ? source.EndedAt is null
+                                ? throw new InvalidOperationException("續約來源缺少實際用完時間")
+                                : DateOnly.FromDateTime(source.EndedAt.Value)
+                            : source.ValidEndDate
+                                ?? throw new InvalidOperationException("續約來源缺少到期日");
+                        var paidDate = DateOnly.FromDateTime(
+                            next.Pass.PaidAt
+                                ?? throw new InvalidOperationException("續約票缺少付款時間"));
+                        activationDate = TicketActivationSchedule.GetRenewalStartDate(
+                            sourceEndDate,
+                            paidDate);
+                        if (activationDate > today)
+                        {
+                            break;
+                        }
+                    }
+
+                    next.Pass.Activate(activationDate);
+                    next.Pass.RefreshStatus(today);
+                    if (next.Pass.ValidStatus != TicketValidStatus.Active)
+                    {
+                        continue;
+                    }
+                }
+
+                active = next is null ? [] : [next];
+                break;
+            }
+
+            return Task.FromResult(active.SingleOrDefault()?.Pass.ToSnapshot());
         }
     }
 

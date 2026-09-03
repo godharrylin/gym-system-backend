@@ -69,11 +69,15 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
                 return false;
             }
 
-            foreach (var rule in _rules)
+            foreach (var ruleCode in ticketPlan.EligibilityRuleCodes.Distinct(
+                StringComparer.OrdinalIgnoreCase))
             {
-                if (!rule.AppliesTo(ticketPlan))
+                var rule = _rules.FirstOrDefault(x => x.RuleCode.Equals(
+                    ruleCode,
+                    StringComparison.OrdinalIgnoreCase));
+                if (rule is null || !rule.AppliesTo(ticketPlan))
                 {
-                    continue;
+                    return false;
                 }
 
                 if (!await rule.IsSatisfiedAsync(context, ticketPlan, ct))

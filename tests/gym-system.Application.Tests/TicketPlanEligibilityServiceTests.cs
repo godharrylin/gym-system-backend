@@ -192,6 +192,8 @@ namespace gym_system.Application.Tests
             CancellationToken ct) => Task.FromResult(true);
             public Task<bool> UpdateCurrentTicketAsync(string userId, CurrentTicketSnapshot
             snapshot, CancellationToken ct) => Task.FromResult(true);
+            public Task<bool> ClearCurrentTicketAsync(string userId, DateTime updatedAt,
+            CancellationToken ct) => Task.FromResult(true);
         }
 
         private sealed class FakeUserRoleRepository : IUserRoleRepository

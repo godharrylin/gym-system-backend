@@ -5,6 +5,7 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
         private const string NewOnlyRuleCode = "NEW_ONLY";
         private const int NewStudentEligibleDays = 30;
         private readonly IStudentTicketPurchaseHistoryQueryService _purchaseHistoryQueryService;
+        public string RuleCode => NewOnlyRuleCode;
 
         public NewOnlyTicketPlanEligibilityRule(
             IStudentTicketPurchaseHistoryQueryService purchaseHistoryQueryService)

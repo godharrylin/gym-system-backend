@@ -1,5 +1,8 @@
 using System.Data;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
+using gym_system.Application.OrdersUseCase.Services;
+using gym_system.Application.TicketPlansUseCase.Queries;
+using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
 using gym_system.Domain.Entities.Users;
@@ -52,6 +55,73 @@ public sealed class RegisterMemberSqlIntegrationTests
         }
     }
 
+    [SqlServerFact]
+    public async Task RegisterWithPaidSingleQuantityFive_ShouldCreateFiveFifoPasses()
+    {
+        var phone = CreateUniquePhone();
+        using var provider = BuildProvider();
+
+        try
+        {
+            await using var scope = provider.CreateAsyncScope();
+            var result = await CreateHandler(scope.ServiceProvider).Handle(new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "FIFO Paid", Phone = phone }],
+                TicketPurchase = new TicketPurchaseInput
+                {
+                    TicketPlanKindId = "SINGLE",
+                    Quantity = 5,
+                    PaymentStatus = PaymentState.Paid
+                }
+            });
+
+            var state = ReadPurchaseState(provider, Assert.Single(result.MemberIds));
+            Assert.Equal(5, state.Quantity);
+            Assert.True(state.HasPaidAt);
+            Assert.Equal(5, state.PassCount);
+            Assert.Equal(1, state.ActivePassCount);
+            Assert.Equal(4, state.UnActivePassCount);
+            Assert.Equal(5, state.PassWithoutValidityDateCount);
+            Assert.True(state.HasCurrentTicket);
+            Assert.False(state.HasCurrentTicketExpiry);
+        }
+        finally
+        {
+            CleanupByPhone(provider, phone);
+        }
+    }
+
+    [SqlServerFact]
+    public async Task RegisterWithUnpaidTicket_ShouldNotCreatePass()
+    {
+        var phone = CreateUniquePhone();
+        using var provider = BuildProvider();
+
+        try
+        {
+            await using var scope = provider.CreateAsyncScope();
+            var result = await CreateHandler(scope.ServiceProvider).Handle(new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "FIFO Unpaid", Phone = phone }],
+                TicketPurchase = new TicketPurchaseInput
+                {
+                    TicketPlanKindId = "SINGLE",
+                    Quantity = 5,
+                    PaymentStatus = PaymentState.UnPaid
+                }
+            });
+
+            var state = ReadPurchaseState(provider, Assert.Single(result.MemberIds));
+            Assert.Equal(5, state.Quantity);
+            Assert.False(state.HasPaidAt);
+            Assert.Equal(0, state.PassCount);
+            Assert.False(state.HasCurrentTicket);
+        }
+        finally
+        {
+            CleanupByPhone(provider, phone);
+        }
+    }
     [SqlServerFact]
     public async Task DuplicatePhone_ShouldBeRejectedByDatabaseConstraint()
     {
@@ -132,9 +202,7 @@ public sealed class RegisterMemberSqlIntegrationTests
                 scope.ServiceProvider.GetRequiredService<IUserRepository>(),
                 new FailingUserRoleRepository(),
                 scope.ServiceProvider.GetRequiredService<IStudentProfileRepository>(),
-                new UnusedTicketPlanRepository(),
-                new UnusedOrderRepository(),
-                new UnusedTicketPassRepository(),
+                CreateTicketPurchaseService(scope.ServiceProvider),
                 scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
                 scope.ServiceProvider.GetRequiredService<IClock>());
 
@@ -160,11 +228,28 @@ public sealed class RegisterMemberSqlIntegrationTests
             services.GetRequiredService<IUserRepository>(),
             services.GetRequiredService<IUserRoleRepository>(),
             services.GetRequiredService<IStudentProfileRepository>(),
-            new UnusedTicketPlanRepository(),
-            new UnusedOrderRepository(),
-            new UnusedTicketPassRepository(),
+            CreateTicketPurchaseService(services),
             services.GetRequiredService<IUnitOfWork>(),
             services.GetRequiredService<IClock>());
+    }
+
+    private static TicketPurchaseService CreateTicketPurchaseService(IServiceProvider services)
+    {
+        var profileRepository = services.GetRequiredService<IStudentProfileRepository>();
+        var roleRepository = services.GetRequiredService<IUserRoleRepository>();
+        var clock = services.GetRequiredService<IClock>();
+        return new TicketPurchaseService(
+            services.GetRequiredService<IUserRepository>(),
+            roleRepository,
+            profileRepository,
+            services.GetRequiredService<ITicketPlanRepository>(),
+            services.GetRequiredService<ITicketPlanCatalogQueryService>(),
+            new TicketPlanEligibilityService(profileRepository, roleRepository, clock, []),
+            new RenewalTicketPassEligibilityService(
+                services.GetRequiredService<ITicketPassRepository>()),
+            services.GetRequiredService<IOrderRepository>(),
+            services.GetRequiredService<ITicketPassRepository>(),
+            clock);
     }
 
     private static ServiceProvider BuildProvider()
@@ -205,6 +290,43 @@ public sealed class RegisterMemberSqlIntegrationTests
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
+    private static PurchaseState ReadPurchaseState(ServiceProvider provider, string userId)
+    {
+        using var scope = provider.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<ISqlConnectionFactory>();
+        using var connection = factory.CreateConnection();
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT TOP (1)
+                i.order_items_quantity,
+                CASE WHEN i.order_items_paid_at IS NULL THEN 0 ELSE 1 END AS has_paid_at,
+                (SELECT COUNT(*) FROM dbo.sdt_ticket_pass p WHERE p.orders_sn = o.orders_sn) AS pass_count,
+                (SELECT COUNT(*) FROM dbo.sdt_ticket_pass p WHERE p.orders_sn = o.orders_sn AND p.valid_status = 'Active') AS active_count,
+                (SELECT COUNT(*) FROM dbo.sdt_ticket_pass p WHERE p.orders_sn = o.orders_sn AND p.valid_status = 'UnActive') AS unactive_count,
+                (SELECT COUNT(*) FROM dbo.sdt_ticket_pass p WHERE p.orders_sn = o.orders_sn AND p.valid_sdate IS NULL AND p.valid_edate IS NULL) AS no_date_count,
+                CASE WHEN sp.sdt_cur_ticket_id IS NULL THEN 0 ELSE 1 END AS has_current_ticket,
+                CASE WHEN sp.sdt_cur_ticket_expire_dt IS NULL THEN 0 ELSE 1 END AS has_current_expiry
+            FROM dbo.orders o
+            INNER JOIN dbo.order_items i ON i.orders_sn = o.orders_sn
+            INNER JOIN dbo.sdt_profile sp ON sp.usr_id = o.orders_buyer_id
+            WHERE o.orders_buyer_id = @userId
+            ORDER BY o.orders_sn DESC;
+            """;
+        AddParameter(command, "@userId", userId);
+        using var reader = command.ExecuteReader();
+        Assert.True(reader.Read());
+        return new PurchaseState(
+            reader.GetInt32(0),
+            reader.GetInt32(1) == 1,
+            reader.GetInt32(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6) == 1,
+            reader.GetInt32(7) == 1);
+    }
+
     private static void CleanupByPhone(ServiceProvider provider, string phone)
     {
         using var scope = provider.CreateScope();
@@ -213,6 +335,20 @@ public sealed class RegisterMemberSqlIntegrationTests
         connection.Open();
         using var command = connection.CreateCommand();
         command.CommandText = """
+            DECLARE @userId VARCHAR(21) = (SELECT TOP (1) usr_id FROM dbo.users WHERE usr_phone = @phone);
+
+            DELETE p
+            FROM dbo.sdt_ticket_pass AS p
+            INNER JOIN dbo.orders AS o ON o.orders_sn = p.orders_sn
+            WHERE o.orders_buyer_id = @userId;
+
+            DELETE i
+            FROM dbo.order_items AS i
+            INNER JOIN dbo.orders AS o ON o.orders_sn = i.orders_sn
+            WHERE o.orders_buyer_id = @userId;
+
+            DELETE FROM dbo.orders WHERE orders_buyer_id = @userId;
+
             DELETE p
             FROM dbo.sdt_profile AS p
             INNER JOIN dbo.users AS u ON p.usr_id = u.usr_id
@@ -258,13 +394,64 @@ public sealed class RegisterMemberSqlIntegrationTests
 
     private sealed class UnusedOrderRepository : IOrderRepository
     {
-        public Task AddAsync(Order order, CancellationToken ct) =>
+        public Task<OrderPersistenceResult> AddAsync(Order order, CancellationToken ct) =>
             throw new InvalidOperationException("純註冊不應建立訂單");
+
+        public Task<UnpaidTicketOrder?> FindUnpaidTicketOrderAsync(
+            string orderId,
+            bool acquireLock,
+            CancellationToken ct) =>
+            throw new InvalidOperationException("純註冊不應查詢訂單");
+
+        public Task MarkPaidAsync(
+            int orderSn,
+            int orderItemSn,
+            DateTime paidAt,
+            string paymentMethod,
+            string operatorId,
+            CancellationToken ct) =>
+            throw new InvalidOperationException("純註冊不應更新訂單");
     }
 
     private sealed class UnusedTicketPassRepository : ITicketPassRepository
     {
-        public Task AddRangeAsync(IReadOnlyList<TicketPass> passes, CancellationToken ct) =>
+        public Task<IReadOnlyList<TicketPassPersistenceResult>> AddRangeAsync(
+            IReadOnlyList<TicketPass> passes,
+            OrderPersistenceResult orderPersistence,
+            CancellationToken ct) =>
             throw new InvalidOperationException("純註冊不應建立票券");
+
+        public Task<TicketPass?> FindLatestMonthlyPassAsync(string ownerId, CancellationToken ct) =>
+            Task.FromResult<TicketPass?>(null);
+
+        public Task<RenewalSourcePass?> FindLatestRenewalSourceAsync(
+            string ownerId,
+            string familyCode,
+            bool acquireLock,
+            CancellationToken ct) => throw new InvalidOperationException("純註冊不應查詢續約來源");
+
+        public Task<bool> HasQueuedPassAsync(string ownerId, CancellationToken ct) =>
+            throw new InvalidOperationException("純註冊不應查詢排隊票券");
+
+        public Task LockOwnerAsync(string ownerId, CancellationToken ct) =>
+            throw new InvalidOperationException("純註冊不應鎖定票券擁有者");
+
+        public Task<CancelledTicketPassResult?> CancelQueuedRenewalAsync(
+            string passId,
+            DateTime cancelledAt,
+            string operatorId,
+            CancellationToken ct) => throw new InvalidOperationException("純註冊不應取消續約票");
+
+        public Task<CurrentTicketSnapshot?> ReconcileCurrentAsync(string ownerId, DateOnly today, DateTime updatedAt, string operatorId, CancellationToken ct) =>
+            Task.FromResult<CurrentTicketSnapshot?>(null);
     }
+    private sealed record PurchaseState(
+        int Quantity,
+        bool HasPaidAt,
+        int PassCount,
+        int ActivePassCount,
+        int UnActivePassCount,
+        int PassWithoutValidityDateCount,
+        bool HasCurrentTicket,
+        bool HasCurrentTicketExpiry);
 }

@@ -1,9 +1,12 @@
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
+using gym_system.Application.OrdersUseCase.Services;
+using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
 using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Enums;
+using gym_system.Domain.Exceptions;
 using gym_system.Domain.Repositories;
 using Xunit;
 
@@ -97,8 +100,7 @@ namespace gym_system.Application.Tests
                 ],
                 TicketPurchase = new TicketPurchaseInput
                 {
-                    TicketPlanKindId = "T_002",
-                    ActivationDate = new DateOnly(2026, 3, 30),
+                    TicketPlanKindId = "PACK_10",
                     PaymentStatus = PaymentState.Paid
                 }
             };
@@ -114,7 +116,7 @@ namespace gym_system.Application.Tests
         }
 
         [Fact]
-        public async Task Handle_ShouldApplyFamilyDiscount_WhenMembersCountGreaterThanOrEqualToTwo()
+        public async Task Handle_ShouldRejectFamilyTicketPurchase_WhenMembersCountGreaterThanOne()
         {
             var sut = CreateSut();
             var command = new RegisterMembersCommand
@@ -126,19 +128,90 @@ namespace gym_system.Application.Tests
                 ],
                 TicketPurchase = new TicketPurchaseInput
                 {
-                    TicketPlanKindId = "T_002",
-                    ActivationDate = new DateOnly(2026, 3, 30),
+                    TicketPlanKindId = "PACK_10",
+                    PaymentStatus = PaymentState.Paid
+                }
+            };
+
+            var error = await Assert.ThrowsAsync<TicketPurchaseRejectedException>(
+                () => sut.Handler.Handle(command));
+
+            Assert.Equal("FAMILY_PURCHASE_NOT_AVAILABLE", error.Code);
+            Assert.Equal("家庭購票功能尚未開放", error.Message);
+            Assert.Empty(sut.PassRepository.StoredPasses);
+            Assert.Equal(1, sut.UnitOfWork.RollbackCount);
+        }
+
+        [Fact]
+        public async Task Handle_ShouldCreateUnpaidOrderWithoutPass()
+        {
+            var sut = CreateSut();
+            var command = new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "A", Phone = "0912000001" }],
+                TicketPurchase = new TicketPurchaseInput
+                {
+                    TicketPlanKindId = "PACK_10",
+                    PaymentStatus = PaymentState.UnPaid
+                }
+            };
+
+            await sut.Handler.Handle(command);
+
+            var order = Assert.Single(sut.OrderRepository.StoredOrders);
+            var item = Assert.Single(order.Items);
+            Assert.Equal(OrderItemPaymentState.UnPaid, item.PaymentState);
+            Assert.Null(item.PaidAt);
+            Assert.Empty(sut.PassRepository.StoredPasses);
+            Assert.Empty(sut.ProfileRepository.UpdatedSnapshots);
+        }
+
+        [Fact]
+        public async Task Handle_ShouldIssueFiveSinglePasses_WhenQuantityIsFive()
+        {
+            var sut = CreateSut();
+            var command = new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "A", Phone = "0912000001" }],
+                TicketPurchase = new TicketPurchaseInput
+                {
+                    TicketPlanKindId = "SINGLE",
+                    Quantity = 5,
                     PaymentStatus = PaymentState.Paid
                 }
             };
 
             var result = await sut.Handler.Handle(command);
 
-            Assert.Equal(4600m, result.TotalAmount);
-            Assert.Equal(4370m, result.ActualAmount);
-            Assert.Equal(2, sut.PassRepository.StoredPasses.Count);
+            Assert.Equal(1250m, result.TotalAmount);
+            var item = Assert.Single(Assert.Single(sut.OrderRepository.StoredOrders).Items);
+            Assert.Equal(5, item.Quantity);
+            Assert.Equal(5, sut.PassRepository.StoredPasses.Count);
+            Assert.Single(sut.PassRepository.StoredPasses, x => x.ValidStatus == TicketValidStatus.Active);
+            Assert.Equal(4, sut.PassRepository.StoredPasses.Count(x => x.ValidStatus == TicketValidStatus.UnActive));
         }
 
+        [Fact]
+        public async Task Handle_ShouldRejectSingleQuantityGreaterThanFive()
+        {
+            var sut = CreateSut();
+            var command = new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "A", Phone = "0912000001" }],
+                TicketPurchase = new TicketPurchaseInput
+                {
+                    TicketPlanKindId = "SINGLE",
+                    Quantity = 6,
+                    PaymentStatus = PaymentState.Paid
+                }
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+
+            Assert.Empty(sut.OrderRepository.StoredOrders);
+            Assert.Empty(sut.PassRepository.StoredPasses);
+            Assert.Equal(1, sut.UnitOfWork.RollbackCount);
+        }
         [Fact]
         public async Task Handle_ShouldThrow_WhenTicketPlanNotFound()
         {
@@ -154,17 +227,16 @@ namespace gym_system.Application.Tests
                 TicketPurchase = new TicketPurchaseInput
                 {
                     TicketPlanKindId = "UNKNOWN",
-                    ActivationDate = new DateOnly(2026, 3, 30),
                     PaymentStatus = PaymentState.UnPaid
                 }
             };
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.Handler.Handle(command));
             Assert.Equal(1, sut.UnitOfWork.RollbackCount);
         }
 
         [Fact]
-        public async Task Handle_ShouldMarkTicketAsUnActive_WhenActivationDateInFuture()
+        public async Task Handle_ShouldActivatePaidTicketImmediately_WhenNoCurrentTicket()
         {
             var sut = CreateSut();
             var command = new RegisterMembersCommand
@@ -175,8 +247,7 @@ namespace gym_system.Application.Tests
                 ],
                 TicketPurchase = new TicketPurchaseInput
                 {
-                    TicketPlanKindId = "T_002",
-                    ActivationDate = new DateOnly(2026, 4, 1),
+                    TicketPlanKindId = "PACK_10",
                     PaymentStatus = PaymentState.Paid
                 }
             };
@@ -184,7 +255,7 @@ namespace gym_system.Application.Tests
             await sut.Handler.Handle(command);
 
             var snapshot = Assert.Single(sut.ProfileRepository.UpdatedSnapshots);
-            Assert.Equal("UnActive", snapshot.TicketValidState);
+            Assert.Equal("Active", snapshot.TicketValidState);
         }
 
         [Fact]
@@ -201,8 +272,7 @@ namespace gym_system.Application.Tests
                 ],
                 TicketPurchase = new TicketPurchaseInput
                 {
-                    TicketPlanKindId = "T_002",
-                    ActivationDate = new DateOnly(2026, 3, 30),
+                    TicketPlanKindId = "PACK_10",
                     PaymentStatus = PaymentState.Paid
                 }
             };
@@ -255,8 +325,7 @@ namespace gym_system.Application.Tests
                 Members = [new MemberRegisterInput { Name = "A", Phone = "0912000001" }],
                 TicketPurchase = new TicketPurchaseInput
                 {
-                    TicketPlanKindId = "T_002",
-                    ActivationDate = new DateOnly(2026, 3, 30),
+                    TicketPlanKindId = "PACK_10",
                     PaymentStatus = PaymentState.Paid
                 }
             };
@@ -278,13 +347,27 @@ namespace gym_system.Application.Tests
             var unitOfWork = new FakeUnitOfWork();
             var clock = new FakeClock();
 
-            var handler = new RegisterMemberHandler(
+            var eligibilityService = new TicketPlanEligibilityService(
+                profileRepository,
+                roleRepository,
+                clock,
+                []);
+            var purchaseService = new TicketPurchaseService(
                 userRepository,
                 roleRepository,
                 profileRepository,
                 ticketPlanRepository,
+                new FakeTicketPlanCatalogQueryService(),
+                eligibilityService,
+                new RenewalTicketPassEligibilityService(passRepository),
                 orderRepository,
                 passRepository,
+                clock);
+            var handler = new RegisterMemberHandler(
+                userRepository,
+                roleRepository,
+                profileRepository,
+                purchaseService,
                 unitOfWork,
                 clock);
 
@@ -323,14 +406,20 @@ namespace gym_system.Application.Tests
 
             public Task<string> AddAsync(User user, CancellationToken ct)
             {
-                StoredUsers.Add(user);
+                var userId = $"U{_nextId++:0000000000}";
+                StoredUsers.Add(User.Rehydrate(
+                    userId,
+                    user.Name,
+                    user.Phone,
+                    user.Password,
+                    user.IsActive));
                 ExistingPhones.Add(user.Phone);
-                return Task.FromResult($"U{_nextId++:0000000000}");
+                return Task.FromResult(userId);
             }
 
             public Task<User?> FindUserByIdAsync(string userId, CancellationToken ct)
             {
-                return Task.FromResult<User?>(null);
+                return Task.FromResult(StoredUsers.FirstOrDefault(x => x.Id == userId));
             }
 
             public Task<User?> FindUserByPhoneAsync(string phone, CancellationToken ct)
@@ -445,6 +534,17 @@ namespace gym_system.Application.Tests
                 UpdatedSnapshots.Add(snapshot);
                 return Task.FromResult(true);
             }
+            public Task<bool> ClearCurrentTicketAsync(string userId, DateTime updatedAt, CancellationToken ct)
+            {
+                var profile = StoredProfiles.FirstOrDefault(x => x.UserId == userId);
+                if (profile is null)
+                {
+                    return Task.FromResult(false);
+                }
+
+                profile.ClearCurrentTicket();
+                return Task.FromResult(true);
+            }
         }
 
         private sealed class FakeTicketPlanRepository : ITicketPlanRepository
@@ -458,18 +558,48 @@ namespace gym_system.Application.Tests
                     return Task.FromResult<TicketPlanKind?>(null);
                 }
 
+                var isSingle = ticketPlanKindId.Equals("SINGLE", StringComparison.OrdinalIgnoreCase);
                 var plan = new TicketPlanKind
                 {
                     Id = ticketPlanKindId,
-                    Name = "Pack 10",
+                    Name = isSingle ? "Single" : "Pack 10",
                     Type = TicketPlanType.Pack,
-                    Price = 2300m,
-                    DefaultCredit = 10,
-                    DefaultExpireDays = 90,
+                    Price = isSingle ? 250m : 2300m,
+                    DefaultCredit = isSingle ? 1 : 10,
+                    DefaultExpireDays = isSingle ? null : 90,
                     IsActive = true
                 };
 
                 return Task.FromResult<TicketPlanKind?>(plan);
+            }
+        }
+
+        private sealed class FakeTicketPlanCatalogQueryService : ITicketPlanCatalogQueryService
+        {
+            public Task<IReadOnlyList<TicketPlanResult>> GetActiveTicketPlansAsync(CancellationToken ct)
+            {
+                IReadOnlyList<TicketPlanResult> plans =
+                [
+                    new TicketPlanResult
+                    {
+                        Id = "PACK_10",
+                        Type = "PACK",
+                        Name = "Pack 10",
+                        Price = 2300m,
+                        Days = 90,
+                        Sessions = 10
+                    },
+                    new TicketPlanResult
+                    {
+                        Id = "SINGLE",
+                        Type = "PACK",
+                        Name = "Single",
+                        Price = 250m,
+                        Days = 0,
+                        Sessions = 1
+                    }
+                ];
+                return Task.FromResult(plans);
             }
         }
 
@@ -478,7 +608,7 @@ namespace gym_system.Application.Tests
             public bool ThrowOnAdd { get; set; }
             public List<Order> StoredOrders { get; } = [];
 
-            public Task AddAsync(Order order, CancellationToken ct)
+            public Task<OrderPersistenceResult> AddAsync(Order order, CancellationToken ct)
             {
                 if (ThrowOnAdd)
                 {
@@ -486,18 +616,95 @@ namespace gym_system.Application.Tests
                 }
 
                 StoredOrders.Add(order);
-                return Task.CompletedTask;
+                return Task.FromResult(new OrderPersistenceResult
+                {
+                    OrderSn = StoredOrders.Count,
+                    OrderId = order.Id,
+                    Items = order.Items.Select((item, index) => new OrderItemPersistenceResult
+                    {
+                        ClientItemId = item.Id,
+                        OrderItemSn = index + 1,
+                        OrderItemId = item.Id
+                    }).ToList()
+                });
             }
+
+            public Task<UnpaidTicketOrder?> FindUnpaidTicketOrderAsync(
+                string orderId,
+                bool acquireLock,
+                CancellationToken ct) => throw new NotSupportedException();
+
+            public Task MarkPaidAsync(
+                int orderSn,
+                int orderItemSn,
+                DateTime paidAt,
+                string paymentMethod,
+                string operatorId,
+                CancellationToken ct) => throw new NotSupportedException();
         }
 
         private sealed class FakeTicketPassRepository : ITicketPassRepository
         {
             public List<TicketPass> StoredPasses { get; } = [];
 
-            public Task AddRangeAsync(IReadOnlyList<TicketPass> passes, CancellationToken ct)
+            public Task<IReadOnlyList<TicketPassPersistenceResult>> AddRangeAsync(
+                IReadOnlyList<TicketPass> passes,
+                OrderPersistenceResult orderPersistence,
+                CancellationToken ct)
             {
                 StoredPasses.AddRange(passes);
-                return Task.CompletedTask;
+                IReadOnlyList<TicketPassPersistenceResult> result = passes.Select((pass, index) => new TicketPassPersistenceResult
+                {
+                    ClientPassId = pass.Id,
+                    OwnerId = pass.OwnerId,
+                    PassSn = index + 1,
+                    PassId = pass.Id
+                }).ToList();
+                return Task.FromResult(result);
+            }
+
+            public Task<TicketPass?> FindLatestMonthlyPassAsync(string ownerId, CancellationToken ct)
+            {
+                return Task.FromResult<TicketPass?>(null);
+            }
+
+            public Task<RenewalSourcePass?> FindLatestRenewalSourceAsync(
+                string ownerId,
+                string familyCode,
+                bool acquireLock,
+                CancellationToken ct) => throw new NotSupportedException();
+
+            public Task<bool> HasQueuedPassAsync(string ownerId, CancellationToken ct) =>
+                throw new NotSupportedException();
+
+            public Task LockOwnerAsync(string ownerId, CancellationToken ct) =>
+                Task.CompletedTask;
+
+            public Task<CancelledTicketPassResult?> CancelQueuedRenewalAsync(
+                string passId,
+                DateTime cancelledAt,
+                string operatorId,
+                CancellationToken ct) => throw new NotSupportedException();
+
+            public Task<CurrentTicketSnapshot?> ReconcileCurrentAsync(
+                string ownerId,
+                DateOnly today,
+                DateTime updatedAt,
+                string operatorId,
+                CancellationToken ct)
+            {
+                var active = StoredPasses
+                    .Where(x => x.OwnerId == ownerId && x.ValidStatus == TicketValidStatus.Active)
+                    .ToList();
+                if (active.Count == 0)
+                {
+                    var next = StoredPasses.FirstOrDefault(
+                        x => x.OwnerId == ownerId && x.ValidStatus == TicketValidStatus.UnActive);
+                    next?.Activate(today);
+                    active = next is null ? [] : [next];
+                }
+
+                return Task.FromResult(active.SingleOrDefault()?.ToSnapshot());
             }
         }
 

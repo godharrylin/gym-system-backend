@@ -1,6 +1,5 @@
+using gym_system.Application.OrdersUseCase.Services;
 using gym_system.Domain.Entities.Members;
-using gym_system.Domain.Entities.Orders;
-using gym_system.Domain.Entities.Tickets;
 using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Enums;
 using gym_system.Domain.Repositories;
@@ -12,9 +11,7 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
         private readonly IUserRepository _userRepository;
         private readonly IUserRoleRepository _userRoleRepository;
         private readonly IStudentProfileRepository _studentProfileRepository;
-        private readonly ITicketPlanRepository _ticketPlanRepository;
-        private readonly IOrderRepository _orderRepository;
-        private readonly ITicketPassRepository _ticketPassRepository;
+        private readonly TicketPurchaseService _ticketPurchaseService;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IClock _clock;
 
@@ -22,23 +19,21 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
             IUserRepository userRepository,
             IUserRoleRepository userRoleRepository,
             IStudentProfileRepository studentProfileRepository,
-            ITicketPlanRepository ticketPlanRepository,
-            IOrderRepository orderRepository,
-            ITicketPassRepository ticketPassRepository,
+            TicketPurchaseService ticketPurchaseService,
             IUnitOfWork unitOfWork,
             IClock clock)
         {
             _userRepository = userRepository;
             _userRoleRepository = userRoleRepository;
             _studentProfileRepository = studentProfileRepository;
-            _ticketPlanRepository = ticketPlanRepository;
-            _orderRepository = orderRepository;
-            _ticketPassRepository = ticketPassRepository;
+            _ticketPurchaseService = ticketPurchaseService;
             _unitOfWork = unitOfWork;
             _clock = clock;
         }
 
-        public async Task<RegisterMembersResult> Handle(RegisterMembersCommand command, CancellationToken ct = default)
+        public async Task<RegisterMembersResult> Handle(
+            RegisterMembersCommand command,
+            CancellationToken ct = default)
         {
             Validate(command);
 
@@ -77,108 +72,30 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
                     registeredUserIds.Add(userId);
                 }
 
-                Order? order = null;
-
-                //  如果有購買票券走這裡
+                TicketPurchaseResult? purchase = null;
                 if (command.TicketPurchase is not null)
                 {
-                    var ticketPurchase = command.TicketPurchase;
-
-                    //  從資料庫撈取票券資訊
-                    var plan = await _ticketPlanRepository.GetActiveByIdAsync(ticketPurchase.TicketPlanKindId, ct)
-                                ?? throw new InvalidOperationException("票券方案不存在或未上架");
-                    //  決定購買量的單位
-                    var qty_unit = plan.Type switch
-                    {
-                        TicketPlanType.Pack => UnitType.Credits,
-                        TicketPlanType.MPass => UnitType.Days,
-                        _ => throw new NotSupportedException($"Unknown type: {plan.Type}.")
-                    };
-                    //  購買預設天數
-                    var qty = plan.Type switch
-                    {
-                        TicketPlanType.Pack => plan.DefaultCredit,
-                        TicketPlanType.MPass => plan.DefaultExpireDays,
-                        _ => throw new NotSupportedException($"Unknown type: {plan.Type}.")
-                    };
-
-                    #region 計算訂單和訂單明細價格 (先算個人再加總) 
-                    var order_total_amount = plan.Price * registeredUserIds.Count;
-
-                    //  1. 兩人以上一起註冊直接給95折，先算個人
-                    var order_actual_amount_person = registeredUserIds.Count >= 2
-                        ? decimal.Round(plan.Price * 0.95m, 0, MidpointRounding.AwayFromZero)
-                        : plan.Price;
-
-                    //  2. 加總人數後便訂單實際價格
-                    var order_actual_amount = order_actual_amount_person * registeredUserIds.Count;
-
-                    #endregion
-                    var createDay = _clock.Now();
-                    //  建立訂單資訊
-                    order = Order.Create(
-                        id: $"ORD-{Guid.NewGuid():N}",
-                        buyerId: registeredUserIds[0],
-                        totalAmount: order_total_amount,
-                        actualAmount: order_actual_amount,
-                        paymentState: ticketPurchase.PaymentStatus == PaymentState.Paid
-                            ? OrderOverallPaymentState.Paid
-                            : OrderOverallPaymentState.UnPaid,
-                        operatorId: command.OperatorId,
-                        buyAt: createDay);
-
-                    //  建立訂單票券明細，及學生票券資訊
-                    var passes = new List<TicketPass>(registeredUserIds.Count);
-                    foreach (var userId in registeredUserIds)
-                    {
-                        //  票券訂單明細
-                        var item = OrderItem.CreateTicketItem(
-                            id: $"ITM-{Guid.NewGuid():N}",
-                            orderId: order.Id,
-                            ticketPlanKindId: plan.Id,
-                            unitPrice: plan.Price,
-                            totalAmount: plan.Price,
-                            actualAmount: order_actual_amount_person,
-                            quantityUnit: qty_unit,
-                            quantity: qty,
-                            bonusQuantity: 0, // 目前預設是0
-                            paymentMethod: OrderItemPaymentMethod.Cash,
-                            paymentState: ticketPurchase.PaymentStatus == PaymentState.Paid
-                                ? OrderItemPaymentState.Paid
-                                : OrderItemPaymentState.UnPaid,
-                            buyAt: createDay);
-                        order.AddItem(item);
-
-                        //  建立票券資訊
-                        var pass = TicketPass.Issue(
-                            id: $"PASS-{Guid.NewGuid():N}",
-                            ownerId: userId,
-                            orderId: order.Id,
-                            orderItemId: item.Id,
-                            plan: plan,
-                            activationDate: ticketPurchase.ActivationDate,
-                            paymentState: ticketPurchase.PaymentStatus,
-                            today: DateOnly.FromDateTime(createDay));
-
-                        passes.Add(pass);
-                        if (!await _studentProfileRepository.UpdateCurrentTicketAsync(userId, pass.ToSnapshot(), ct))
+                    purchase = await _ticketPurchaseService.PurchaseAsync(
+                        new TicketPurchaseRequest
                         {
-                            throw new InvalidOperationException("更新會員票券快照失敗");
-                        }
-                    }
-
-                    await _orderRepository.AddAsync(order, ct);
-                    await _ticketPassRepository.AddRangeAsync(passes, ct);
+                            BuyerId = registeredUserIds[0],
+                            BeneficiaryStudentIds = registeredUserIds,
+                            TicketPlanKindCode = command.TicketPurchase.TicketPlanKindId,
+                            Quantity = command.TicketPurchase.Quantity,
+                            PaymentStatus = command.TicketPurchase.PaymentStatus,
+                            PaymentMethod = "Cash",
+                            OperatorId = command.OperatorId
+                        },
+                        ct);
                 }
 
                 await _unitOfWork.CommitAsync(ct);
-
                 return new RegisterMembersResult
                 {
                     MemberIds = registeredUserIds,
-                    OrderId = order?.Id,
-                    TotalAmount = order?.TotalAmount,
-                    ActualAmount = order?.ActualAmount
+                    OrderId = purchase?.OrderId,
+                    TotalAmount = purchase?.TotalAmount,
+                    ActualAmount = purchase?.ActualAmount
                 };
             }
             catch
@@ -208,7 +125,8 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
                 }
             }
 
-            if (command.TicketPurchase is not null && string.IsNullOrWhiteSpace(command.TicketPurchase.TicketPlanKindId))
+            if (command.TicketPurchase is not null
+                && string.IsNullOrWhiteSpace(command.TicketPurchase.TicketPlanKindId))
             {
                 throw new InvalidOperationException("票券方案必填");
             }

@@ -152,6 +152,32 @@ internal sealed class SqlStudentProfileRepository : IStudentProfileRepository
         return affected == 1;
     }
 
+    public async Task<bool> ClearCurrentTicketAsync(
+        string userId,
+        DateTime updatedAt,
+        CancellationToken ct)
+    {
+        const string sql = """
+            UPDATE dbo.sdt_profile
+            SET sdt_cur_ticket_id = NULL,
+                sdt_cur_ticket_type = NULL,
+                sdt_cur_ticket_valid_state = NULL,
+                sdt_cur_ticket_payment_state = NULL,
+                sdt_cur_ticket_remain_count = NULL,
+                sdt_cur_ticket_expire_dt = NULL,
+                sdt_cur_ticket_up_dt = @updatedAt
+            WHERE usr_id = @userId
+            """;
+
+        var affected = await _session.Connection.ExecuteAsync(
+            new CommandDefinition(
+                sql,
+                new { userId, updatedAt },
+                transaction: _session.Transaction,
+                cancellationToken: ct));
+
+        return affected == 1;
+    }
     private sealed class StudentProfileRow
     {
         public string usr_id { get; init; } = string.Empty;

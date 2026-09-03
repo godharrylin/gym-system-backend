@@ -33,7 +33,7 @@ public sealed class TicketPlansControllerTest
         var response = Assert.IsType<GetTicketPlansResponse>(ok.Value);
         var plan = Assert.Single(response.TicketPlans!);
 
-        Assert.Equal("$2300", plan.Price);
+        Assert.Equal(2300m, plan.Price);
 
     }
 

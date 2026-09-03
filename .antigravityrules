@@ -1,0 +1,42 @@
+# 專案後端全域開發規則 (Global Rules)
+
+## 1. 核心開發流程 (SOP) - 絕對遵守
+* ** 先提案再實作: ** 當我提出新需求時，你必需先用列點的方式回覆你的「實作計畫」、「預計修改的檔案結構」以及「選擇則該技術/寫法的理由」。 ** 必須等我回復「同意」後，你才能開始生成或修改程式碼。 **
+* ** 前端對齊: ** 前端專案的資料夾絕對路徑為 `D:\HarryLin\GitHub\Web\gym-system-frontend`，當任務涉及前後端API串接時，你會先取得前端的API呼叫邏輯與資料介面(Interface/Type)，確保後端規格完全對齊。
+* ** API 規格文件: ** 所有 API 規格皆統一收錄於 `./doc/api` 資料夾下的 Markdown 檔案中。在實作前，請務必先閱讀對應的規格文件，確保前後端定義一致。
+
+## 2. Tech & Framework
+* ** backend stack: ** .NET 10 (C#) with ASP.NET Core Web API.
+* ** Database Operations
+    *
+    * The application uses Microsoft SQL Server.
+    * To optimize performance and maitainability, the data access follows the ** Command Querys Responsibility Segregation (CQRS) pattern: **
+        * ** Command(Write) Operations **
+            * Implemented using EF Core.
+            * Responsible for handling data modifications (Create, Update, Delete).
+        * ** Query(Read) Operations **
+            * Implemented using Dapper.
+            * Responsible for data retrieval.
+
+## 3. Architecture Constraints (Clean Architecture)
+Strictly follow Clean Architecture principles. Dependencies must point inwards.
+1. ** Domain Layer: 
+    * Contains Entities, Enums, Exceptions, and Domain Interface. 
+    * Must have NO dependencies on other layers.
+    * The folder relative path is `./gym-system.Domain`.
+2. ** Application Layer: ** 
+    * Contains Use Cases (CQRS Hamdlers), DTOs, Validation, and Interfaces (e.g.,IRepository).
+    * The folder relative path is `./gym-system.Application`.
+3. ** Infrasturcture Layer: ** 
+    * Contains EF Core DbContext, Dapper connections, and third-party API integrations.
+    * The folder relative path is `./gym-system.Infrastructure`.
+4. ** Presentation Layer: ** 
+    * Contains Controllers, Middleware, and DI configurations. 
+    * Controllers can ONLY call the Application layer.
+    * Never write SQL or direct Infrastructure in Controllers.
+    * The folder relative path is `./gym-system.API`.
+
+## 4. Coding Style & Standards
+* Strictly adhere to the DRY (Don't Repeat Yourself) principle.
+* Naming Conventions: PascalCase for Classes/Methods/Properties, camelCase for local variables.
+* API Responses: Return a standardized JSON format for all endpoints (e.g., `{ "IsSuccess": bool, "Message": "string", "Data": object }`).

@@ -1,6 +1,7 @@
 using gym_system.Api.Contracts;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
 using gym_system.Domain.Enums;
+using gym_system.Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace gym_system.Api.Controllers
@@ -19,26 +20,41 @@ namespace gym_system.Api.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterMembersRequest request, CancellationToken ct)
         {
-            var command = new RegisterMembersCommand
+            try
             {
-                Members = request.Members.Select(x => new MemberRegisterInput
+                var command = new RegisterMembersCommand
                 {
-                    Name = x.Name,
-                    Phone = x.Phone
-                }).ToList(),
-                TicketPurchase = request.TicketPurchase is null
-                    ? null
-                    : new TicketPurchaseInput
+                    Members = request.Members.Select(x => new MemberRegisterInput
                     {
-                        TicketPlanKindId = request.TicketPurchase.TicketPlanKindId,
-                        ActivationDate = request.TicketPurchase.ActivationDate,
-                        PaymentStatus = ParsePaymentState(request.TicketPurchase.PaymentStatus)
-                    },
-                OperatorId = "ADMIN_PLACEHOLDER"
-            };
+                        Name = x.Name,
+                        Phone = x.Phone
+                    }).ToList(),
+                    TicketPurchase = request.TicketPurchase is null
+                        ? null
+                        : new TicketPurchaseInput
+                        {
+                            TicketPlanKindId = request.TicketPurchase.TicketPlanKindId,
+                            Quantity = request.TicketPurchase.Quantity,
+                            PaymentStatus = ParsePaymentState(request.TicketPurchase.PaymentStatus)
+                        },
+                    OperatorId = "ADMIN_PLACEHOLDER"
+                };
 
-            var result = await _registerMemberHandler.Handle(command, ct);
-            return Ok(result);
+                var result = await _registerMemberHandler.Handle(command, ct);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { code = "TICKET_PLAN_NOT_AVAILABLE", message = ex.Message });
+            }
+            catch (TicketPurchaseRejectedException ex)
+            {
+                return Conflict(new { code = ex.Code, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { code = "MEMBER_REGISTRATION_REJECTED", message = ex.Message });
+            }
         }
 
         private static PaymentState ParsePaymentState(string status)
@@ -49,7 +65,13 @@ namespace gym_system.Api.Controllers
                 return PaymentState.Paid;
             }
 
-            return PaymentState.UnPaid;
+            if (status.Equals("UNPAID", StringComparison.OrdinalIgnoreCase) ||
+                status.Equals("UnPaid", StringComparison.OrdinalIgnoreCase))
+            {
+                return PaymentState.UnPaid;
+            }
+
+            throw new InvalidOperationException("付款狀態不支援");
         }
     }
 }

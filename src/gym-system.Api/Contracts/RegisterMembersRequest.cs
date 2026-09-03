@@ -15,7 +15,7 @@ namespace gym_system.Api.Contracts
     public sealed class TicketPurchaseItem
     {
         public string TicketPlanKindId { get; init; } = string.Empty;
-        public DateOnly ActivationDate { get; init; }
+        public int Quantity { get; init; } = 1;
         public string PaymentStatus { get; init; } = "UnPaid";
     }
 }

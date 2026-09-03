@@ -13,6 +13,7 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
         /// </summary>
         public required string Type { get; set; }
         public required string Name { get; set; }
+        public string? FamilyCode { get; set; }
         /// <summary>
         /// 票券單價
         /// </summary>
@@ -20,11 +21,11 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
         /// <summary>
         /// 到期天數
         /// </summary>
-        public int Days { get; set; }
+        public int? Days { get; set; }
         /// <summary>
         /// 可使用堂數
         /// </summary>
-        public int Sessions { get; set; }
+        public int? Sessions { get; set; }
 
         /// <summary>
         /// 票券方案標籤，用來控制畫面顯示
