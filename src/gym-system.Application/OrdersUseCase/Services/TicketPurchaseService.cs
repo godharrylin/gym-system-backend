@@ -93,6 +93,17 @@ namespace gym_system.Application.OrdersUseCase.Services
                         "TICKET_PLAN_NOT_AVAILABLE",
                         "學生不符合此票券購買資格");
                 }
+                if (request.EligibilityContextKind == TicketPlanEligibilityContextKind.Registration)
+                {
+                    context = new StudentTicketPlanEligibilityContext
+                    {
+                        StudentId = context.StudentId,
+                        Kind = TicketPlanEligibilityContextKind.Registration,
+                        IsActiveStudent = false,
+                        StudentAssignedAt = context.StudentAssignedAt,
+                        Now = context.Now
+                    };
+                }
 
                 var isRenewal = activePlanResult.EligibilityRuleCodes.Contains(
                     "RENEWAL",
@@ -333,6 +344,8 @@ namespace gym_system.Application.OrdersUseCase.Services
         public PaymentState PaymentStatus { get; init; }
         public string? PaymentMethod { get; init; }
         public string OperatorId { get; init; } = "ADMIN_PLACEHOLDER";
+        public TicketPlanEligibilityContextKind EligibilityContextKind { get; init; } =
+            TicketPlanEligibilityContextKind.ExistingMember;
     }
 
     public sealed class TicketPurchaseResult

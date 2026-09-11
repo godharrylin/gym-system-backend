@@ -10,8 +10,24 @@ using Xunit.Abstractions;
 
 namespace gym_system.Api.Tests;
 
-public sealed class UserRoleRepositoryIntegrationTests
+[Collection("Ticket SQL")]
+public sealed class UserRoleRepositoryIntegrationTests : IAsyncLifetime
 {
+    private readonly TicketSqlFixture _fixture = new();
+    private string? _testUserId;
+    public Task InitializeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync()
+    {
+        await _sp.DisposeAsync();
+        await _fixture.DisposeAsync();
+    }
+
+    private async Task<string> TestUser()
+    {
+        if (_testUserId is not null) return _testUserId;
+        _testUserId = await _fixture.AddStudent();
+        return _testUserId;
+    }
     private readonly ServiceProvider _sp;
     private readonly ITestOutputHelper _output;
     public UserRoleRepositoryIntegrationTests(ITestOutputHelper output)
@@ -41,18 +57,21 @@ public sealed class UserRoleRepositoryIntegrationTests
     public async Task GetUserRoleAsync_ShouldGetTheRole()
     {
         //  給個測試的UserID
-        var userId = "U00006";
+        var userId = await TestUser();
         CancellationToken ct = new CancellationToken();
-        var getRole = await GetUserRoleAsync_Test(userId, UserRoleCode.Instructor, ct);
+        var getRole = await GetUserRoleAsync_Test(userId, UserRoleCode.Student, ct);
+        Assert.NotNull(getRole);
+        Assert.Equal(_fixture.Clock.Now().AddDays(-2), getRole.AssignedAt);
         _output.WriteLine($"getRole: ID={getRole?.UserId} ,Role={getRole?.RoleCode}, AssignedAt={getRole?.AssignedAt}");
     }
     [SqlServerFact]
     public async Task GetUserRoleAsync_ShouldNotGetTheRole()
     {
         //  給個測試的UserID
-        var userId = "U00007";
+        var userId = await TestUser();
         CancellationToken ct = new CancellationToken();
         var getRole = await GetUserRoleAsync_Test(userId, UserRoleCode.Instructor, ct);
+        Assert.Null(getRole);
         _output.WriteLine($"getRole: ID={getRole?.UserId} ,Role={getRole?.RoleCode}, AssignedAt={getRole?.AssignedAt}");
     }
     [SqlServerFact]
@@ -63,8 +82,12 @@ public sealed class UserRoleRepositoryIntegrationTests
 
 
         CancellationToken ct = new CancellationToken();
-        var role = UserRole.Assign("U00008", UserRoleCode.Instructor, DateTime.UtcNow, true);
+        var userId = await TestUser();
+        var assignedAt = _fixture.Clock.Now();
+        var role = UserRole.Assign(userId, UserRoleCode.Instructor, assignedAt, true);
         var isSuccess = await roleRepo.AddRoleAsync(role, ct);
+        Assert.True(isSuccess);
+        Assert.Equal(assignedAt, (await roleRepo.GetUserRoleAsync(userId, UserRoleCode.Instructor, ct))!.AssignedAt);
     }
     [SqlServerFact]
     public async Task ReactiveRole_ShouldSuccess()
@@ -73,7 +96,10 @@ public sealed class UserRoleRepositoryIntegrationTests
         var roleRepo = scope.ServiceProvider.GetRequiredService<IUserRoleRepository>();
         CancellationToken ct = new CancellationToken();
 
-            await roleRepo.ReactivateRoleAsync("U00006", UserRoleCode.Instructor, ct);
+        var userId = await TestUser();
+        await roleRepo.SetRoleActiveAsync(userId, UserRoleCode.Student, false, ct);
+        Assert.True(await roleRepo.ReactivateRoleAsync(userId, UserRoleCode.Student, ct));
+        Assert.True((await roleRepo.GetUserRoleAsync(userId, UserRoleCode.Student, ct))!.IsActive);
     }
     private async Task<UserRole?> GetUserRoleAsync_Test(string userId, UserRoleCode roleType, CancellationToken ct)
     {

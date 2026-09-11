@@ -92,7 +92,7 @@ namespace gym_system.Infrastructures
         [
             new TicketPlanKind
             {
-                Id = "T_001",
+                Id = "SINGLE",
                 Name = "Single",
                 FamilyCode = "SINGLE",
                 Type = TicketPlanType.Pack,
@@ -503,7 +503,9 @@ namespace gym_system.Infrastructures
             return Task.FromResult(_store.Passes.Any(x =>
                 x.OwnerId.Equals(ownerId, StringComparison.OrdinalIgnoreCase)
                 && x.PaymentState == PaymentState.Paid
-                && x.ValidStatus == TicketValidStatus.UnActive));
+                && x.ValidStatus == TicketValidStatus.UnActive
+                && x.PaidAt is not null
+                && !IsSingle(x)));
         }
 
         public Task LockOwnerAsync(string ownerId, CancellationToken ct) =>
@@ -539,15 +541,10 @@ namespace gym_system.Infrastructures
             CancellationToken ct)
         {
             var ownerPasses = _store.Passes
-                .Select((pass, index) => new { Pass = pass, PassSn = index + 1 })
+                .Select((pass, index) => new InMemoryPassItem(pass, index + 1))
                 .Where(x => x.Pass.OwnerId.Equals(ownerId, StringComparison.OrdinalIgnoreCase)
                     && x.Pass.PaymentState == PaymentState.Paid)
                 .ToList();
-            foreach (var item in ownerPasses)
-            {
-                item.Pass.RefreshStatus(today);
-            }
-
             var active = ownerPasses
                 .Where(x => x.Pass.ValidStatus == TicketValidStatus.Active)
                 .ToList();
@@ -556,51 +553,46 @@ namespace gym_system.Infrastructures
                 throw new InvalidOperationException($"學生 {ownerId} 同時存在多張 Active 票券");
             }
 
+            int? justEndedPassSn = null;
+            if (active.Count == 1)
+            {
+                var current = active[0];
+                current.Pass.RefreshStatus(today);
+                if (current.Pass.ValidStatus != TicketValidStatus.Active)
+                {
+                    justEndedPassSn = current.PassSn;
+                    active.Clear();
+                }
+            }
+
+            if (active.Count == 1 && IsSingle(active[0].Pass))
+            {
+                var nextNonSingle = FindNextActivatable(
+                    ownerPasses,
+                    today,
+                    justEndedPassSn,
+                    includeSingle: false);
+                if (nextNonSingle is not null)
+                {
+                    active[0].Pass.YieldSingleToQueue();
+                    nextNonSingle.Pass.Activate(nextNonSingle.ActivationDate);
+                    nextNonSingle.Pass.RefreshStatus(today);
+                    active = ownerPasses
+                        .Where(x => x.Pass.ValidStatus == TicketValidStatus.Active)
+                        .ToList();
+                }
+            }
+
             while (active.Count == 0)
             {
-                var next = ownerPasses
-                    .Where(x => x.Pass.ValidStatus == TicketValidStatus.UnActive)
-                    .OrderBy(x => x.Pass.RenewedFromPassSn is null ? 1 : 0)
-                    .ThenBy(x => x.Pass.PaidAt ?? DateTime.MinValue)
-                    .ThenBy(x => x.PassSn)
-                    .FirstOrDefault(x =>
-                    {
-                        if (x.Pass.RenewedFromPassSn is null)
-                        {
-                            return true;
-                        }
-
-                        var sourceIndex = x.Pass.RenewedFromPassSn.Value - 1;
-                        return sourceIndex >= 0
-                            && sourceIndex < _store.Passes.Count
-                            && _store.Passes[sourceIndex].ValidStatus is TicketValidStatus.Expire
-                                or TicketValidStatus.Depleted;
-                    });
+                var next = FindNextActivatable(
+                    ownerPasses,
+                    today,
+                    justEndedPassSn,
+                    includeSingle: true);
                 if (next is not null)
                 {
-                    var activationDate = today;
-                    if (next.Pass.RenewedFromPassSn is int sourcePassSn)
-                    {
-                        var source = _store.Passes[sourcePassSn - 1];
-                        var sourceEndDate = source.EndReason == TicketEndReason.Depleted
-                            ? source.EndedAt is null
-                                ? throw new InvalidOperationException("續約來源缺少實際用完時間")
-                                : DateOnly.FromDateTime(source.EndedAt.Value)
-                            : source.ValidEndDate
-                                ?? throw new InvalidOperationException("續約來源缺少到期日");
-                        var paidDate = DateOnly.FromDateTime(
-                            next.Pass.PaidAt
-                                ?? throw new InvalidOperationException("續約票缺少付款時間"));
-                        activationDate = TicketActivationSchedule.GetRenewalStartDate(
-                            sourceEndDate,
-                            paidDate);
-                        if (activationDate > today)
-                        {
-                            break;
-                        }
-                    }
-
-                    next.Pass.Activate(activationDate);
+                    next.Pass.Activate(next.ActivationDate);
                     next.Pass.RefreshStatus(today);
                     if (next.Pass.ValidStatus != TicketValidStatus.Active)
                     {
@@ -608,12 +600,98 @@ namespace gym_system.Infrastructures
                     }
                 }
 
-                active = next is null ? [] : [next];
+                active = ownerPasses
+                    .Where(x => x.Pass.ValidStatus == TicketValidStatus.Active)
+                    .ToList();
                 break;
             }
 
             return Task.FromResult(active.SingleOrDefault()?.Pass.ToSnapshot());
         }
+
+        private ActivatableInMemoryPass? FindNextActivatable(
+            IReadOnlyList<InMemoryPassItem> ownerPasses,
+            DateOnly today,
+            int? justEndedPassSn,
+            bool includeSingle)
+        {
+            foreach (var item in ownerPasses
+                .Where(x => x.Pass.ValidStatus == TicketValidStatus.UnActive)
+                .Where(x => x.Pass.PaidAt is not null)
+                .Where(x => includeSingle || !IsSingle(x.Pass))
+                .OrderBy(x => IsSingle(x.Pass) ? 1 : 0)
+                .ThenBy(x =>
+                {
+                    if (justEndedPassSn is not null && x.Pass.RenewedFromPassSn == justEndedPassSn)
+                    {
+                        return 0;
+                    }
+
+                    return x.Pass.RenewedFromPassSn is null ? 2 : 1;
+                })
+                .ThenBy(x => x.Pass.PaidAt ?? DateTime.MinValue)
+                .ThenBy(x => x.PassSn))
+            {
+                var activationDate = today;
+                if (item.Pass.RenewedFromPassSn is int sourcePassSn)
+                {
+                    var sourceIndex = sourcePassSn - 1;
+                    if (sourceIndex < 0 || sourceIndex >= _store.Passes.Count)
+                    {
+                        continue;
+                    }
+
+                    var source = _store.Passes[sourceIndex];
+                    if (source.ValidStatus is not TicketValidStatus.Expire
+                        and not TicketValidStatus.Depleted)
+                    {
+                        continue;
+                    }
+
+                    var sourceEndDate = source.EndReason == TicketEndReason.Depleted
+                        ? source.EndedAt is null
+                            ? throw new InvalidOperationException("續約來源缺少實際用完時間")
+                            : DateOnly.FromDateTime(source.EndedAt.Value)
+                        : source.ValidEndDate
+                            ?? throw new InvalidOperationException("續約來源缺少到期日");
+                    var paidDate = DateOnly.FromDateTime(
+                        item.Pass.PaidAt
+                            ?? throw new InvalidOperationException("續約票缺少付款時間"));
+                    activationDate = TicketActivationSchedule.GetRenewalStartDate(
+                        sourceEndDate,
+                        paidDate);
+                    if (activationDate > today)
+                    {
+                        continue;
+                    }
+                }
+
+                // Expired renewal candidates must not make an active SINGLE yield.
+                // Like SQL, end the candidate and reconsider its successor first.
+                if (!IsSingle(item.Pass))
+                {
+                    var days = item.Pass.Plan.DefaultExpireDays
+                        ?? throw new InvalidOperationException("非單次票方案缺少有效天數");
+                    if (TicketActivationSchedule.GetEndDate(activationDate, days) < today)
+                    {
+                        item.Pass.Activate(activationDate);
+                        item.Pass.RefreshStatus(today);
+                        return FindNextActivatable(ownerPasses, today, item.PassSn, includeSingle);
+                    }
+                }
+
+                return new ActivatableInMemoryPass(item.Pass, activationDate);
+            }
+
+            return null;
+        }
+
+        private static bool IsSingle(TicketPass pass) =>
+            pass.Plan.Id.Equals("SINGLE", StringComparison.OrdinalIgnoreCase);
+
+        private sealed record ActivatableInMemoryPass(TicketPass Pass, DateOnly ActivationDate);
+
+        private sealed record InMemoryPassItem(TicketPass Pass, int PassSn);
     }
 
     internal sealed class NoopUnitOfWork : IUnitOfWork

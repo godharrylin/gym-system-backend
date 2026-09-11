@@ -61,7 +61,8 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
 
     private sealed class Fixture
     {
-        public Fixture(decimal planPrice = 1960m, bool canPurchase = true)
+        public Fixture(decimal planPrice = 1960m, bool canPurchase = true,
+            bool newOnlyAtPayment = false, DateTime? assignedAt = null, bool hasPass = false)
         {
             var plan = new TicketPlanKind
             {
@@ -76,13 +77,18 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
             OrderRepository = new FakeOrderRepository();
             PassRepository = new FakeTicketPassRepository();
             ProfileRepository = new FakeStudentProfileRepository();
+            var roles = new FakeUserRoleRepository(assignedAt ?? PaidAt.AddMonths(-1));
+            ITicketPlanEligibilityService eligibility = newOnlyAtPayment
+                ? new TicketPlanEligibilityService(ProfileRepository, roles, new FakeClock(),
+                    [new NewOnlyTicketPlanEligibilityRule(new FakePurchaseHistory(hasPass))])
+                : new FakeEligibilityService(canPurchase);
             Service = new UnpaidTicketOrderPaymentService(
                 new FakeUserRepository(),
-                new FakeUserRoleRepository(),
+                roles,
                 ProfileRepository,
                 new FakeTicketPlanRepository(plan),
-                new FakeTicketPlanCatalogQueryService(plan),
-                new FakeEligibilityService(canPurchase),
+                new FakeTicketPlanCatalogQueryService(plan, newOnlyAtPayment),
+                eligibility,
                 new RenewalTicketPassEligibilityService(PassRepository),
                 OrderRepository,
                 PassRepository,
@@ -218,10 +224,10 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
         public Task<bool> UpdateBasicProfileAsync(string userId, string name, string phone, CancellationToken ct) => throw new NotSupportedException();
     }
 
-    private sealed class FakeUserRoleRepository : IUserRoleRepository
+    private sealed class FakeUserRoleRepository(DateTime assignedAt) : IUserRoleRepository
     {
         public Task<UserRole?> GetUserRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct) =>
-            Task.FromResult<UserRole?>(UserRole.Assign("U1", UserRoleCode.Student, PaidAt.AddMonths(-1), true));
+            Task.FromResult<UserRole?>(UserRole.Assign("U1", UserRoleCode.Student, assignedAt, true));
         public Task<IReadOnlyList<UserRole>> GetActiveRolesAsync(string userId, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> AddRoleAsync(UserRole userRole, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> ReactivateRoleAsync(string userId, UserRoleCode roleType, CancellationToken ct) => throw new NotSupportedException();
@@ -239,7 +245,12 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
     private sealed class FakeTicketPlanCatalogQueryService : ITicketPlanCatalogQueryService
     {
         private readonly TicketPlanKind _plan;
-        public FakeTicketPlanCatalogQueryService(TicketPlanKind plan) => _plan = plan;
+        private readonly bool _newOnly;
+        public FakeTicketPlanCatalogQueryService(TicketPlanKind plan, bool newOnly)
+        {
+            _plan = plan;
+            _newOnly = newOnly;
+        }
         public Task<IReadOnlyList<TicketPlanResult>> GetActiveTicketPlansAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<TicketPlanResult>>(
             [
@@ -251,7 +262,8 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
                     Type = "MONTHLY",
                     Price = _plan.Price,
                     Days = _plan.DefaultExpireDays,
-                    Sessions = _plan.DefaultCredit
+                    Sessions = _plan.DefaultCredit,
+                    EligibilityRuleCodes = _newOnly ? ["NEW_ONLY"] : []
                 }
             ]);
     }
@@ -267,9 +279,18 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
             new StudentTicketPlanEligibilityContext
             {
                 StudentId = studentId,
+                Kind = TicketPlanEligibilityContextKind.ExistingMember,
                 IsActiveStudent = true,
                 Now = PaidAt
             });
+
+        public StudentTicketPlanEligibilityContext CreateRegistrationContext() =>
+            new()
+            {
+                Kind = TicketPlanEligibilityContextKind.Registration,
+                IsActiveStudent = false,
+                Now = PaidAt
+            };
 
         public Task<bool> CanPurchaseAsync(
             StudentTicketPlanEligibilityContext context,
@@ -281,5 +302,47 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
     {
         public DateTime Now() => PaidAt;
         public DateOnly Today() => DateOnly.FromDateTime(PaidAt);
+    }
+
+    // E12: an existing unpaid order is evaluated as an existing member using
+    // the current catalog, even when NEW_ONLY was added after order creation.
+    [Fact]
+    public async Task DelayedPayment_ShouldUseExistingMemberRulesAndIssuePassOnlyAfterPayment()
+    {
+        var fixture = new Fixture(newOnlyAtPayment: true, assignedAt: new DateTime(2026, 9, 1));
+        Assert.Empty(fixture.PassRepository.Passes);
+        Assert.Null(fixture.ProfileRepository.Profile.CurrentTicket);
+
+        await fixture.Service.PayAsync("ORD-1", "Cash", "ADMIN-1");
+
+        var pass = Assert.Single(fixture.PassRepository.Passes);
+        Assert.Equal(PaidAt, pass.PaidAt);
+        Assert.Equal(DateOnly.FromDateTime(PaidAt), pass.ValidStartDate);
+        Assert.Equal(TicketValidStatus.Active, pass.ValidStatus);
+    }
+
+    // E13: a valid order does not reserve eligibility until a later payment.
+    [Theory]
+    [InlineData(30, false)]
+    [InlineData(2, true)]
+    public async Task DelayedPayment_ShouldRejectExpiredOrConsumedNewOnlyEligibility(
+        int daysSinceAssignment, bool hasPass)
+    {
+        var fixture = new Fixture(newOnlyAtPayment: true,
+            assignedAt: PaidAt.AddDays(-daysSinceAssignment), hasPass: hasPass);
+
+        var error = await Assert.ThrowsAsync<TicketPurchaseRejectedException>(
+            () => fixture.Service.PayAsync("ORD-1", "Cash", "ADMIN-1"));
+
+        Assert.Equal("TICKET_PLAN_NOT_AVAILABLE", error.Code);
+        Assert.Null(fixture.OrderRepository.MarkedPaidAt);
+        Assert.Empty(fixture.PassRepository.Passes);
+        Assert.Null(fixture.ProfileRepository.Profile.CurrentTicket);
+    }
+
+    private sealed class FakePurchaseHistory(bool hasPass) : IStudentTicketPurchaseHistoryQueryService
+    {
+        public Task<bool> HasPurchasedTicketPlanAsync(string studentId, string code, CancellationToken ct)
+            => Task.FromResult(hasPass);
     }
 }

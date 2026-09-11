@@ -1,4 +1,5 @@
 using gym_system.Application.OrdersUseCase.Services;
+using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Enums;
@@ -84,7 +85,8 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
                             Quantity = command.TicketPurchase.Quantity,
                             PaymentStatus = command.TicketPurchase.PaymentStatus,
                             PaymentMethod = "Cash",
-                            OperatorId = command.OperatorId
+                            OperatorId = command.OperatorId,
+                            EligibilityContextKind = TicketPlanEligibilityContextKind.Registration
                         },
                         ct);
                 }

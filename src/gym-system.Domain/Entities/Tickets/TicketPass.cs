@@ -182,6 +182,19 @@ namespace gym_system.Domain.Entities.Tickets
             End(TicketEndReason.Cancelled, cancelledAt);
         }
 
+        public void YieldSingleToQueue()
+        {
+            if (ValidStatus != TicketValidStatus.Active
+                || !Plan.Id.Equals("SINGLE", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("只有使用中的單次票可以讓位");
+            }
+
+            ValidStatus = TicketValidStatus.UnActive;
+            ValidStartDate = null;
+            ValidEndDate = null;
+        }
+
         private void End(TicketEndReason reason, DateTime endedAt)
         {
             if (ValidStatus is TicketValidStatus.Expire

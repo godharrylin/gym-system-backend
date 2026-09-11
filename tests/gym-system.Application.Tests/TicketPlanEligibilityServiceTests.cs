@@ -54,6 +54,40 @@ namespace gym_system.Application.Tests
 
         [Fact]
         public async Task
+        CanPurchaseAsync_ShouldReturnTrue_ForNewOnlyPlan_OnThirtiethCalendarDay()
+        {
+            var fixture = CreateFixture(
+                assignedAt: new DateTime(2026, 6, 11, 23, 59, 0),
+                now: new DateTime(2026, 7, 10, 0, 1, 0));
+            var context = await fixture.Service.GetEligibilityContextAsync("U0000000001",
+            CancellationToken.None);
+            var plan = CreatePlan(eligibilityRuleCodes: ["NEW_ONLY"]);
+
+            var actual = await fixture.Service.CanPurchaseAsync(context!, plan,
+            CancellationToken.None);
+
+            Assert.True(actual);
+        }
+
+        [Fact]
+        public async Task
+        CanPurchaseAsync_ShouldReturnFalse_ForNewOnlyPlan_OnThirtyFirstCalendarDay()
+        {
+            var fixture = CreateFixture(
+                assignedAt: new DateTime(2026, 6, 10, 23, 59, 0),
+                now: new DateTime(2026, 7, 10, 0, 1, 0));
+            var context = await fixture.Service.GetEligibilityContextAsync("U0000000001",
+            CancellationToken.None);
+            var plan = CreatePlan(eligibilityRuleCodes: ["NEW_ONLY"]);
+
+            var actual = await fixture.Service.CanPurchaseAsync(context!, plan,
+            CancellationToken.None);
+
+            Assert.False(actual);
+        }
+
+        [Fact]
+        public async Task
         CanPurchaseAsync_ShouldReturnFalse_ForNewOnlyPlan_WhenStudentJoinedMoreThanThirtyDaysAgo()
         {
             var fixture = CreateFixture(assignedAt: new DateTime(2026, 6, 1));
@@ -62,6 +96,34 @@ namespace gym_system.Application.Tests
             var plan = CreatePlan(eligibilityRuleCodes: ["NEW_ONLY"]);
 
             var actual = await fixture.Service.CanPurchaseAsync(context!, plan,
+            CancellationToken.None);
+
+            Assert.False(actual);
+        }
+
+        [Fact]
+        public async Task
+        CanPurchaseAsync_ShouldReturnTrue_ForRegularPlan_InRegistrationContext()
+        {
+            var fixture = CreateFixture(assignedAt: new DateTime(2026, 6, 20));
+            var context = fixture.Service.CreateRegistrationContext();
+            var plan = CreatePlan(eligibilityRuleCodes: []);
+
+            var actual = await fixture.Service.CanPurchaseAsync(context, plan,
+            CancellationToken.None);
+
+            Assert.True(actual);
+        }
+
+        [Fact]
+        public async Task
+        CanPurchaseAsync_ShouldReturnFalse_ForNewOnlyPlan_InRegistrationContext()
+        {
+            var fixture = CreateFixture(assignedAt: new DateTime(2026, 6, 20));
+            var context = fixture.Service.CreateRegistrationContext();
+            var plan = CreatePlan(eligibilityRuleCodes: ["NEW_ONLY"]);
+
+            var actual = await fixture.Service.CanPurchaseAsync(context, plan,
             CancellationToken.None);
 
             Assert.False(actual);
@@ -86,7 +148,7 @@ namespace gym_system.Application.Tests
 
         [Fact]
         public async Task
-        CanPurchaseAsync_ShouldReturnTrue_ForNewOnlyPlan_WhenOnlyCanceledPurchaseExists()
+        CanPurchaseAsync_ShouldReturnFalse_ForNewOnlyPlan_WhenCanceledPassExists()
         {
             var fixture = CreateFixture(
                 assignedAt: new DateTime(2026, 6, 20),
@@ -98,7 +160,7 @@ namespace gym_system.Application.Tests
             var actual = await fixture.Service.CanPurchaseAsync(context!, plan,
             CancellationToken.None);
 
-            Assert.True(actual);
+            Assert.False(actual);
         }
 
         [Fact]
@@ -114,12 +176,123 @@ namespace gym_system.Application.Tests
             Assert.Null(actual);
         }
 
+        // E02: registration must reject both current membership-only rules.
+        [Theory]
+        [InlineData("NEW_ONLY")]
+        [InlineData("RENEWAL")]
+        public async Task Registration_ShouldRejectRuleWithoutExplicitOptIn(string ruleCode)
+        {
+            var rule = new DefaultRegistrationRule(ruleCode);
+            var fixture = CreateFixture(new DateTime(2026, 9, 1), rules: [rule]);
+
+            var allowed = await fixture.Service.CanPurchaseAsync(
+                fixture.Service.CreateRegistrationContext(), CreatePlan([ruleCode]), CancellationToken.None);
+
+            Assert.False(allowed);
+            Assert.False(rule.WasEvaluated);
+        }
+
+        // E03/E04: registration support is only a gate, not the eligibility result.
+        [Theory]
+        [InlineData(true, true, true, true)]
+        [InlineData(true, true, false, false)]
+        [InlineData(true, false, true, false)]
+        [InlineData(false, true, true, false)]
+        public async Task Registration_ShouldCheckSupportApplicabilityAndCondition(
+            bool supportsRegistration, bool applies, bool satisfied, bool expected)
+        {
+            var rule = new ConfigurableRule("REGISTRATION_OFFER", supportsRegistration, applies, satisfied);
+            var fixture = CreateFixture(new DateTime(2026, 9, 1), rules: [rule]);
+            var context = fixture.Service.CreateRegistrationContext();
+
+            var allowed = await fixture.Service.CanPurchaseAsync(
+                context, CreatePlan([rule.RuleCode]), CancellationToken.None);
+
+            Assert.Equal(expected, allowed);
+            Assert.Null(context.StudentId);
+            Assert.False(context.IsActiveStudent);
+            Assert.Equal(supportsRegistration && applies, rule.WasEvaluated);
+        }
+
+        [Fact]
+        public async Task Registration_ShouldRejectPlanWhenOneRuleDoesNotSupportRegistration()
+        {
+            var supported = new ConfigurableRule("REGISTRATION_OFFER", true, true, true);
+            var memberOnly = new DefaultRegistrationRule("MEMBER_ONLY");
+            var fixture = CreateFixture(new DateTime(2026, 9, 1), rules: [supported, memberOnly]);
+
+            var allowed = await fixture.Service.CanPurchaseAsync(
+                fixture.Service.CreateRegistrationContext(),
+                CreatePlan([supported.RuleCode, memberOnly.RuleCode]), CancellationToken.None);
+
+            Assert.False(allowed);
+            Assert.False(memberOnly.WasEvaluated);
+        }
+
+        // E05: unknown codes emitted by the catalog must never become unrestricted plans.
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task CanPurchase_ShouldRejectUnknownRuleInEitherContext(bool registration)
+        {
+            var fixture = CreateFixture(new DateTime(2026, 9, 1));
+            var context = registration
+                ? fixture.Service.CreateRegistrationContext()
+                : await fixture.Service.GetEligibilityContextAsync("U0000000001", CancellationToken.None);
+
+            var allowed = await fixture.Service.CanPurchaseAsync(
+                context!, CreatePlan(["UNKNOWN_RESTRICTION"]), CancellationToken.None);
+
+            Assert.False(allowed);
+        }
+
+        [Fact]
+        public async Task ExistingMember_ShouldRunMemberOnlyRuleAndRejectFailedCondition()
+        {
+            var rule = new ConfigurableRule("MEMBER_ONLY", false, true, false);
+            var fixture = CreateFixture(new DateTime(2026, 9, 1), rules: [rule]);
+            var context = await fixture.Service.GetEligibilityContextAsync("U0000000001", CancellationToken.None);
+
+            Assert.False(await fixture.Service.CanPurchaseAsync(
+                context!, CreatePlan([rule.RuleCode]), CancellationToken.None));
+            Assert.True(rule.WasEvaluated);
+        }
+
+        private sealed class DefaultRegistrationRule(string ruleCode) : ITicketPlanEligibilityRule
+        {
+            public string RuleCode => ruleCode;
+            public bool WasEvaluated { get; private set; }
+            public bool AppliesTo(TicketPlanResult plan) => true;
+            public Task<bool> IsSatisfiedAsync(StudentTicketPlanEligibilityContext context,
+                TicketPlanResult plan, CancellationToken ct)
+            {
+                WasEvaluated = true;
+                return Task.FromResult(true);
+            }
+        }
+
+        private sealed class ConfigurableRule(string ruleCode, bool supportsRegistration,
+            bool applies, bool satisfied) : ITicketPlanEligibilityRule
+        {
+            public string RuleCode => ruleCode;
+            public bool SupportsRegistration => supportsRegistration;
+            public bool WasEvaluated { get; private set; }
+            public bool AppliesTo(TicketPlanResult plan) => applies;
+            public Task<bool> IsSatisfiedAsync(StudentTicketPlanEligibilityContext context,
+                TicketPlanResult plan, CancellationToken ct)
+            {
+                WasEvaluated = true;
+                return Task.FromResult(satisfied);
+            }
+        }
+
         private static Fixture CreateFixture(
             DateTime assignedAt,
             bool isRoleActive = true,
             DateTime? now = null,
             string[]? purchasedPlanCodes = null,
-            string[]? canceledPlanCodes = null)
+            string[]? canceledPlanCodes = null,
+            ITicketPlanEligibilityRule[]? rules = null)
         {
             var studentId = "U0000000001";
             var profileRepository = new FakeStudentProfileRepository
@@ -134,7 +307,7 @@ namespace gym_system.Application.Tests
             var purchaseHistoryQueryService = new FakeStudentTicketPurchaseHistoryQueryService(
                 purchasedPlanCodes ?? [],
                 canceledPlanCodes ?? []);
-            var rules = new ITicketPlanEligibilityRule[]
+            rules ??= new ITicketPlanEligibilityRule[]
             {
                   new NewOnlyTicketPlanEligibilityRule(purchaseHistoryQueryService)
             };
@@ -239,7 +412,7 @@ namespace gym_system.Application.Tests
             {
                 if (_canceledPlanCodes.Contains(ticketPlanCode))
                 {
-                    return Task.FromResult(false);
+                    return Task.FromResult(true);
                 }
 
                 return Task.FromResult(_purchasedPlanCodes.Contains(ticketPlanCode));

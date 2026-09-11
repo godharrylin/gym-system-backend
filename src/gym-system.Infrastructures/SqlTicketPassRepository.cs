@@ -131,10 +131,13 @@ namespace gym_system.Infrastructures
                     FROM dbo.sdt_ticket_pass AS p
                     INNER JOIN dbo.order_items AS i
                         ON i.order_items_sn = p.order_items_sn
+                    INNER JOIN dbo.ticket_plan_kind AS k
+                        ON k.ticket_plan_kind_code = p.ticket_plan_kind_code
                     WHERE p.owner_id = @ownerId
                       AND p.valid_status = 'UnActive'
                       AND i.order_items_payment_state = 'Paid'
                       AND i.order_items_paid_at IS NOT NULL
+                      AND p.ticket_plan_kind_code <> 'SINGLE'
                 ) THEN 1 ELSE 0 END AS bit);
                 """;
 
@@ -288,6 +291,8 @@ namespace gym_system.Infrastructures
                 SELECT
                     p.pass_sn,
                     p.pass_id,
+                    p.ticket_plan_kind_code,
+                    k.ticket_plan_family_code,
                     p.ticket_plan_kind_type,
                     p.valid_status,
                     p.valid_edate,
@@ -297,6 +302,8 @@ namespace gym_system.Infrastructures
                 FROM dbo.sdt_ticket_pass AS p
                 INNER JOIN dbo.order_items AS i
                     ON i.order_items_sn = p.order_items_sn
+                INNER JOIN dbo.ticket_plan_kind AS k
+                    ON k.ticket_plan_kind_code = p.ticket_plan_kind_code
                 WHERE p.owner_id = @ownerId
                     AND p.valid_status = 'Active'
                     AND i.order_items_payment_state = 'Paid'
@@ -370,156 +377,66 @@ namespace gym_system.Infrastructures
                     justEndedPassSn = active.pass_sn;
                     activeRows.Clear();
                 }
-            }
-
-            while (activeRows.Count == 0)
-            {
-                const string nextSql = """
-                    SELECT TOP (1)
-                        p.pass_sn,
-                        p.ticket_plan_kind_code,
-                        p.renewed_from_pass_sn,
-                        k.ticket_plan_kind_default_expire_days,
-                        i.order_items_paid_at,
-                        source.valid_status AS source_valid_status,
-                        source.valid_edate AS source_valid_edate,
-                        source.ended_at AS source_ended_at,
-                        source.end_reason AS source_end_reason
-                    FROM dbo.sdt_ticket_pass AS p WITH (UPDLOCK, HOLDLOCK)
-                    INNER JOIN dbo.order_items AS i
-                        ON i.order_items_sn = p.order_items_sn
-                    INNER JOIN dbo.ticket_plan_kind AS k
-                        ON k.ticket_plan_kind_code = p.ticket_plan_kind_code
-                    LEFT JOIN dbo.sdt_ticket_pass AS source
-                        ON source.pass_sn = p.renewed_from_pass_sn
-                    WHERE p.owner_id = @ownerId
-                      AND p.valid_status = 'UnActive'
-                      AND i.order_items_payment_state = 'Paid'
-                      AND i.order_items_paid_at IS NOT NULL
-                      AND
-                      (
-                          p.renewed_from_pass_sn IS NULL
-                          OR source.valid_status IN ('Expire', 'Depleted')
-                      )
-                    ORDER BY
-                        CASE
-                            WHEN @justEndedPassSn IS NOT NULL
-                                 AND p.renewed_from_pass_sn = @justEndedPassSn THEN 0
-                            WHEN p.renewed_from_pass_sn IS NOT NULL THEN 1
-                            ELSE 2
-                        END,
-                        i.order_items_paid_at ASC,
-                        p.pass_sn ASC;
-                    """;
-
-                var next = await _session.Connection.QueryFirstOrDefaultAsync<QueuedPassRow>(
-                    new CommandDefinition(
-                        nextSql,
-                        new { ownerId, justEndedPassSn },
-                        transaction: _session.Transaction,
-                        cancellationToken: ct));
-
-                if (next is not null)
+                else if (IsSingle(active.ticket_plan_kind_code))
                 {
-                    var isSingle = next.ticket_plan_kind_code.Equals("SINGLE", StringComparison.OrdinalIgnoreCase);
-                    var activationDate = today;
-                    if (next.renewed_from_pass_sn is not null)
+                    var next = await FindNextActivatablePassAsync(
+                        ownerId,
+                        today,
+                        todayDate,
+                        justEndedPassSn,
+                        updatedAt,
+                        operatorId,
+                        includeSingle: false,
+                        ct);
+                    if (next is not null)
                     {
-                        DateTime? sourceEndAt = next.source_end_reason?.Equals(
-                            TicketEndReason.Depleted.ToString(),
-                            StringComparison.OrdinalIgnoreCase) == true
-                                ? next.source_ended_at
-                                : next.source_valid_edate;
-                        if (sourceEndAt is null || next.order_items_paid_at is null)
-                        {
-                            throw new InvalidOperationException("續約票缺少來源結束日或付款時間");
-                        }
-
-                        var sourceEndDate = DateOnly.FromDateTime(sourceEndAt.Value);
-                        var paidDate = DateOnly.FromDateTime(next.order_items_paid_at.Value);
-                        activationDate = TicketActivationSchedule.GetRenewalStartDate(
-                            sourceEndDate,
-                            paidDate);
-                        if (activationDate > today)
-                        {
-                            break;
-                        }
-                    }
-
-                    DateTime? validStartDate = isSingle
-                        ? null
-                        : activationDate.ToDateTime(TimeOnly.MinValue);
-                    DateTime? validEndDate = isSingle
-                        ? null
-                        : next.ticket_plan_kind_default_expire_days is int expireDays && expireDays > 0
-                            ? TicketActivationSchedule.GetEndDate(activationDate, expireDays)
-                                .ToDateTime(TimeOnly.MinValue)
-                            : throw new InvalidOperationException("非單次票方案缺少有效天數");
-
-                    if (validEndDate is not null && validEndDate.Value.Date < todayDate)
-                    {
-                        const string expireQueuedSql = """
+                        const string yieldSingleSql = """
                             UPDATE dbo.sdt_ticket_pass
-                            SET valid_status = 'Expire',
-                                valid_sdate = @validStartDate,
-                                valid_edate = @validEndDate,
-                                ended_at = @validEndDate,
-                                end_reason = 'Expire',
+                            SET valid_status = 'UnActive',
+                                valid_sdate = NULL,
+                                valid_edate = NULL,
                                 update_dt = @updatedAt,
                                 update_pn = @operatorId
                             WHERE pass_sn = @passSn
-                              AND valid_status = 'UnActive';
+                              AND valid_status = 'Active';
                             """;
-                        var expired = await _session.Connection.ExecuteAsync(
+                        var yielded = await _session.Connection.ExecuteAsync(
                             new CommandDefinition(
-                                expireQueuedSql,
+                                yieldSingleSql,
                                 new
                                 {
-                                    passSn = next.pass_sn,
-                                    validStartDate,
-                                    validEndDate,
+                                    passSn = active.pass_sn,
                                     updatedAt,
                                     operatorId
                                 },
                                 transaction: _session.Transaction,
                                 cancellationToken: ct));
-                        if (expired != 1)
+                        if (yielded != 1)
                         {
-                            throw new InvalidOperationException("過期排隊票券狀態更新失敗");
+                            throw new InvalidOperationException("單次票讓位失敗");
                         }
 
-                        justEndedPassSn = next.pass_sn;
-                        continue;
+                        await ActivatePassAsync(next, updatedAt, operatorId, ct);
+                        activeRows.Clear();
+                        activeRows.Add(active);
                     }
+                }
+            }
 
-                    const string activateSql = """
-                        UPDATE dbo.sdt_ticket_pass
-                        SET valid_status = 'Active',
-                            valid_sdate = @validStartDate,
-                            valid_edate = @validEndDate,
-                            update_dt = @updatedAt,
-                            update_pn = @operatorId
-                        WHERE pass_sn = @passSn
-                            AND valid_status = 'UnActive';
-                        """;
-
-                    var affected = await _session.Connection.ExecuteAsync(
-                        new CommandDefinition(
-                            activateSql,
-                            new
-                            {
-                                passSn = next.pass_sn,
-                                validStartDate,
-                                validEndDate,
-                                updatedAt,
-                                operatorId
-                            },
-                            transaction: _session.Transaction,
-                            cancellationToken: ct));
-                    if (affected != 1)
-                    {
-                        throw new InvalidOperationException("FIFO 票券啟用失敗");
-                    }
+            while (activeRows.Count == 0)
+            {
+                var next = await FindNextActivatablePassAsync(
+                    ownerId,
+                    today,
+                    todayDate,
+                    justEndedPassSn,
+                    updatedAt,
+                    operatorId,
+                    includeSingle: true,
+                    ct);
+                if (next is not null)
+                {
+                    await ActivatePassAsync(next, updatedAt, operatorId, ct);
 
                     break;
                 }
@@ -567,6 +484,209 @@ namespace gym_system.Infrastructures
                     UpdatedAt = updatedAt
                 };
         }
+
+        private async Task<QueuedPassActivation?> FindNextActivatablePassAsync(
+            string ownerId,
+            DateOnly today,
+            DateTime todayDate,
+            int? justEndedPassSn,
+            DateTime updatedAt,
+            string operatorId,
+            bool includeSingle,
+            CancellationToken ct)
+        {
+            while (true)
+            {
+                const string nextSql = """
+                    SELECT
+                        p.pass_sn,
+                        p.ticket_plan_kind_code,
+                        k.ticket_plan_family_code,
+                        p.renewed_from_pass_sn,
+                        k.ticket_plan_kind_default_expire_days,
+                        i.order_items_paid_at,
+                        source.valid_status AS source_valid_status,
+                        source.valid_edate AS source_valid_edate,
+                        source.ended_at AS source_ended_at,
+                        source.end_reason AS source_end_reason
+                    FROM dbo.sdt_ticket_pass AS p WITH (UPDLOCK, HOLDLOCK)
+                    INNER JOIN dbo.order_items AS i
+                        ON i.order_items_sn = p.order_items_sn
+                    INNER JOIN dbo.ticket_plan_kind AS k
+                        ON k.ticket_plan_kind_code = p.ticket_plan_kind_code
+                    LEFT JOIN dbo.sdt_ticket_pass AS source
+                        ON source.pass_sn = p.renewed_from_pass_sn
+                    WHERE p.owner_id = @ownerId
+                      AND p.valid_status = 'UnActive'
+                      AND i.order_items_payment_state = 'Paid'
+                      AND i.order_items_paid_at IS NOT NULL
+                      AND (@includeSingle = 1 OR p.ticket_plan_kind_code <> 'SINGLE')
+                      AND
+                      (
+                          p.renewed_from_pass_sn IS NULL
+                          OR source.valid_status IN ('Expire', 'Depleted')
+                      )
+                    ORDER BY
+                        CASE
+                            WHEN p.ticket_plan_kind_code = 'SINGLE' THEN 1
+                            ELSE 0
+                        END,
+                        CASE
+                            WHEN @justEndedPassSn IS NOT NULL
+                                 AND p.renewed_from_pass_sn = @justEndedPassSn THEN 0
+                            WHEN p.renewed_from_pass_sn IS NOT NULL THEN 1
+                            ELSE 2
+                        END,
+                        i.order_items_paid_at ASC,
+                        p.pass_sn ASC;
+                    """;
+
+                var candidates = (await _session.Connection.QueryAsync<QueuedPassRow>(
+                    new CommandDefinition(
+                        nextSql,
+                        new
+                        {
+                            ownerId,
+                            justEndedPassSn,
+                            includeSingle
+                        },
+                        transaction: _session.Transaction,
+                        cancellationToken: ct))).AsList();
+                if (candidates.Count == 0)
+                {
+                    return null;
+                }
+
+                foreach (var next in candidates)
+                {
+                    var isSingle = IsSingle(next.ticket_plan_kind_code);
+                    var activationDate = today;
+                    if (next.renewed_from_pass_sn is not null)
+                    {
+                        DateTime? sourceEndAt = next.source_end_reason?.Equals(
+                            TicketEndReason.Depleted.ToString(),
+                            StringComparison.OrdinalIgnoreCase) == true
+                                ? next.source_ended_at
+                                : next.source_valid_edate;
+                        if (sourceEndAt is null || next.order_items_paid_at is null)
+                        {
+                            throw new InvalidOperationException("續約票缺少來源結束日或付款時間");
+                        }
+
+                        var sourceEndDate = DateOnly.FromDateTime(sourceEndAt.Value);
+                        var paidDate = DateOnly.FromDateTime(next.order_items_paid_at.Value);
+                        activationDate = TicketActivationSchedule.GetRenewalStartDate(
+                            sourceEndDate,
+                            paidDate);
+                        if (activationDate > today)
+                        {
+                            continue;
+                        }
+                    }
+
+                    DateTime? validStartDate = isSingle
+                        ? null
+                        : activationDate.ToDateTime(TimeOnly.MinValue);
+                    DateTime? validEndDate = isSingle
+                        ? null
+                        : next.ticket_plan_kind_default_expire_days is int expireDays && expireDays > 0
+                            ? TicketActivationSchedule.GetEndDate(activationDate, expireDays)
+                                .ToDateTime(TimeOnly.MinValue)
+                            : throw new InvalidOperationException("非單次票方案缺少有效天數");
+
+                    if (validEndDate is not null && validEndDate.Value.Date < todayDate)
+                    {
+                        const string expireQueuedSql = """
+                            UPDATE dbo.sdt_ticket_pass
+                            SET valid_status = 'Expire',
+                                valid_sdate = @validStartDate,
+                                valid_edate = @validEndDate,
+                                ended_at = @validEndDate,
+                                end_reason = 'Expire',
+                                update_dt = @updatedAt,
+                                update_pn = @operatorId
+                            WHERE pass_sn = @passSn
+                              AND valid_status = 'UnActive';
+                            """;
+                        var expired = await _session.Connection.ExecuteAsync(
+                            new CommandDefinition(
+                                expireQueuedSql,
+                                new
+                                {
+                                    passSn = next.pass_sn,
+                                    validStartDate,
+                                    validEndDate,
+                                    updatedAt,
+                                    operatorId
+                                },
+                                transaction: _session.Transaction,
+                                cancellationToken: ct));
+                        if (expired != 1)
+                        {
+                            throw new InvalidOperationException("過期排隊票券狀態更新失敗");
+                        }
+
+                        return await FindNextActivatablePassAsync(
+                            ownerId,
+                            today,
+                            todayDate,
+                            next.pass_sn,
+                            updatedAt,
+                            operatorId,
+                            includeSingle,
+                            ct);
+                    }
+
+                    return new QueuedPassActivation
+                    {
+                        PassSn = next.pass_sn,
+                        ValidStartDate = validStartDate,
+                        ValidEndDate = validEndDate
+                    };
+                }
+
+                return null;
+            }
+        }
+
+        private async Task ActivatePassAsync(
+            QueuedPassActivation next,
+            DateTime updatedAt,
+            string operatorId,
+            CancellationToken ct)
+        {
+            const string activateSql = """
+                UPDATE dbo.sdt_ticket_pass
+                SET valid_status = 'Active',
+                    valid_sdate = @validStartDate,
+                    valid_edate = @validEndDate,
+                    update_dt = @updatedAt,
+                    update_pn = @operatorId
+                WHERE pass_sn = @passSn
+                    AND valid_status = 'UnActive';
+                """;
+
+            var affected = await _session.Connection.ExecuteAsync(
+                new CommandDefinition(
+                    activateSql,
+                    new
+                    {
+                        passSn = next.PassSn,
+                        next.ValidStartDate,
+                        next.ValidEndDate,
+                        updatedAt,
+                        operatorId
+                    },
+                    transaction: _session.Transaction,
+                    cancellationToken: ct));
+            if (affected != 1)
+            {
+                throw new InvalidOperationException("FIFO 票券啟用失敗");
+            }
+        }
+
+        private static bool IsSingle(string ticketPlanKindCode) =>
+            ticketPlanKindCode.Equals("SINGLE", StringComparison.OrdinalIgnoreCase);
 
         private async Task<TicketPassInsertRow> InsertAsync(
             TicketPass pass,
@@ -688,6 +808,7 @@ namespace gym_system.Infrastructures
         {
             public int pass_sn { get; init; }
             public string ticket_plan_kind_code { get; init; } = string.Empty;
+            public string? ticket_plan_family_code { get; init; }
             public int? renewed_from_pass_sn { get; init; }
             public int? ticket_plan_kind_default_expire_days { get; init; }
             public DateTime? order_items_paid_at { get; init; }
@@ -701,12 +822,21 @@ namespace gym_system.Infrastructures
         {
             public int pass_sn { get; init; }
             public string pass_id { get; init; } = string.Empty;
+            public string ticket_plan_kind_code { get; init; } = string.Empty;
+            public string? ticket_plan_family_code { get; init; }
             public string ticket_plan_kind_type { get; init; } = string.Empty;
             public string valid_status { get; init; } = string.Empty;
             public DateTime? valid_edate { get; init; }
             public int? credits_remaining { get; init; }
             public DateTime? ended_at { get; init; }
             public string? end_reason { get; init; }
+        }
+
+        private sealed class QueuedPassActivation
+        {
+            public int PassSn { get; init; }
+            public DateTime? ValidStartDate { get; init; }
+            public DateTime? ValidEndDate { get; init; }
         }
 
         private sealed class ActivePassRow

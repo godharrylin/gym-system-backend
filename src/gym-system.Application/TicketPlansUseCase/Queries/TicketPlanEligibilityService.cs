@@ -50,8 +50,19 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
             return new StudentTicketPlanEligibilityContext
             {
                 StudentId = normalizedStudentId,
+                Kind = TicketPlanEligibilityContextKind.ExistingMember,
                 IsActiveStudent = true,
                 StudentAssignedAt = studentRole.AssignedAt,
+                Now = _clock.Now()
+            };
+        }
+
+        public StudentTicketPlanEligibilityContext CreateRegistrationContext()
+        {
+            return new StudentTicketPlanEligibilityContext
+            {
+                Kind = TicketPlanEligibilityContextKind.Registration,
+                IsActiveStudent = false,
                 Now = _clock.Now()
             };
         }
@@ -64,7 +75,9 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
             ArgumentNullException.ThrowIfNull(context);
             ArgumentNullException.ThrowIfNull(ticketPlan);
 
-            if (!context.IsActiveStudent)
+            if (!context.IsRegistration
+                && (context.Kind != TicketPlanEligibilityContextKind.ExistingMember
+                    || !context.IsActiveStudent || string.IsNullOrWhiteSpace(context.StudentId)))
             {
                 return false;
             }
@@ -75,7 +88,9 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
                 var rule = _rules.FirstOrDefault(x => x.RuleCode.Equals(
                     ruleCode,
                     StringComparison.OrdinalIgnoreCase));
-                if (rule is null || !rule.AppliesTo(ticketPlan))
+                if (rule is null
+                    || context.IsRegistration && !rule.SupportsRegistration
+                    || !rule.AppliesTo(ticketPlan))
                 {
                     return false;
                 }

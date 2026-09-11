@@ -31,15 +31,7 @@ namespace gym_system.Infrastructures.Queries.TicketPlans
                     COALESCE(
                         '[' + STRING_AGG('"' + r.plan_rule_code + '"', ',') + ']',
                         '[]'
-                    ) AS Tags,
-                    COALESCE(
-                        '[' + STRING_AGG(
-                            CASE WHEN r.plan_rule_code IN ('NEW_ONLY', 'RENEWAL')
-                                THEN '"' + r.plan_rule_code + '"'
-                            END,
-                            ',') + ']',
-                        '[]'
-                    ) AS EligibilityRuleCodes
+                    ) AS Tags
                 FROM dbo.ticket_plan_kind k
                 LEFT JOIN dbo.ticket_plan_kind_rule kr
                     ON kr.ticket_plan_kind_sn = k.ticket_plan_kind_sn
@@ -55,7 +47,7 @@ namespace gym_system.Infrastructures.Queries.TicketPlans
                       INNER JOIN dbo.plan_rule restrictiveRule
                           ON restrictiveRule.plan_rule_sn = restrictiveKr.plan_rule_sn
                       WHERE restrictiveKr.ticket_plan_kind_sn = k.ticket_plan_kind_sn
-                        AND restrictiveRule.plan_rule_code IN ('NEW_ONLY', 'RENEWAL')
+                        AND restrictiveRule.plan_rule_code NOT IN @nonEligibilityRuleCodes
                         AND
                         (
                             restrictiveKr.ticket_plan_kind_rule_is_enabled <> 'Y'
@@ -71,7 +63,7 @@ namespace gym_system.Infrastructures.Queries.TicketPlans
                       WHERE hiddenKr.ticket_plan_kind_sn = k.ticket_plan_kind_sn
                         AND hiddenKr.ticket_plan_kind_rule_is_enabled = 'Y'
                         AND hiddenRule.plan_rule_is_active = 'Y'
-                        AND hiddenRule.plan_rule_code = 'HIDDEN'
+                        AND hiddenRule.plan_rule_code IN @displayOnlyRuleCodes
                   )
                 GROUP BY
                     k.ticket_plan_kind_sn,
@@ -87,9 +79,23 @@ namespace gym_system.Infrastructures.Queries.TicketPlans
 
             using (var conn = _factory.CreateConnection())
             {
-                var command = new CommandDefinition(sql, cancellationToken: ct);
-                var rows = await conn.QueryAsync<TicketPlanResult>(command);
-                return rows.AsList();
+                var command = new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        // string[] has a global JSON type handler for Tags. Lists must
+                        // stay enumerable so Dapper expands SQL IN parameters.
+                        nonEligibilityRuleCodes = TicketPlanRulePolicy.GetNonEligibilityRuleCodes().ToList(),
+                        displayOnlyRuleCodes = TicketPlanRulePolicy.GetDisplayOnlyRuleCodes().ToList()
+                    },
+                    cancellationToken: ct);
+                var rows = (await conn.QueryAsync<TicketPlanResult>(command)).AsList();
+                foreach (var row in rows)
+                {
+                    row.EligibilityRuleCodes = TicketPlanRulePolicy.BuildEligibilityRuleCodes(row.Tags);
+                }
+
+                return rows;
             }
         }
     }

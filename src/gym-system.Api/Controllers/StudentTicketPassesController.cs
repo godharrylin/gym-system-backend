@@ -36,6 +36,7 @@ namespace gym_system.Api.Controllers
                         PaymentStatus = x.PaymentStatus,
                         UnitPrice = x.UnitPrice,
                         PaidAt = x.PaidAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        PaidAtTimestamp = FormatTaipeiTimestamp(x.PaidAt),
                         ValidStartDate = x.ValidStartDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                         ValidEndDate = x.ValidEndDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                         CreditsTotal = x.CreditsTotal,
@@ -52,6 +53,13 @@ namespace gym_system.Api.Controllers
             {
                 return Conflict(new { code = "TICKET_STATE_CONFLICT", message = ex.Message });
             }
+        }
+
+        private static string FormatTaipeiTimestamp(DateTime value)
+        {
+            var localTime = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+            return new DateTimeOffset(localTime, TimeSpan.FromHours(8))
+                .ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
         }
     }
 }

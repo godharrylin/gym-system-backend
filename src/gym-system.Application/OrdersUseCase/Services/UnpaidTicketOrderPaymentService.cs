@@ -100,6 +100,8 @@ namespace gym_system.Application.OrdersUseCase.Services
                 ?? throw new KeyNotFoundException("票券方案不存在或未上架");
 
             await _ticketPassRepository.LockOwnerAsync(unpaidOrder.BuyerId, ct);
+            // Delayed payment, including registration orders, revalidates the
+            // existing member against today's catalog. Unpaid orders issue no pass.
             var context = await _ticketPlanEligibilityService.GetEligibilityContextAsync(
                 unpaidOrder.BuyerId,
                 ct);

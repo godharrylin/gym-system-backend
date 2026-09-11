@@ -99,12 +99,26 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
             var isCancellationRetry = source.HasCancelledRenewal;
             if (isCancellationRetry)
             {
-                if (source.LastCancelledRenewalAt is null
-                    || DateOnly.FromDateTime(source.LastCancelledRenewalAt.Value) != today)
+                if (source.LastCancelledRenewalAt is null)
                 {
                     return RenewalEligibilityEvaluation.Rejected(
                         "RENEWAL_RETRY_EXPIRED",
-                        "取消續約票後只允許在取消當天重訂");
+                        "取消續約票後缺少可判斷的取消時間");
+                }
+
+                var retryDeadline = DateOnly.FromDateTime(
+                    source.LastCancelledRenewalAt.Value).AddDays(1);
+                var originalRenewalDeadline = effectiveEndDate.Value.AddDays(RenewalGraceDays);
+                if (retryDeadline > originalRenewalDeadline)
+                {
+                    retryDeadline = originalRenewalDeadline;
+                }
+
+                if (today > retryDeadline)
+                {
+                    return RenewalEligibilityEvaluation.Rejected(
+                        "RENEWAL_RETRY_EXPIRED",
+                        "取消續約票後已超過可重訂期限");
                 }
             }
             else if (await _ticketPassRepository.HasQueuedPassAsync(studentId.Trim(), ct))

@@ -10,9 +10,14 @@ namespace gym_system.Api.Controllers
     public class TicketPlansController : ControllerBase
     {
         private readonly ITicketPlanCatalogQueryService _ticketPlanQueryService;
-        public TicketPlansController(ITicketPlanCatalogQueryService ticketPlanQueryService)
+        private readonly ITicketPlanEligibilityService _ticketPlanEligibilityService;
+
+        public TicketPlansController(
+            ITicketPlanCatalogQueryService ticketPlanQueryService,
+            ITicketPlanEligibilityService ticketPlanEligibilityService)
         {
             _ticketPlanQueryService = ticketPlanQueryService;
+            _ticketPlanEligibilityService = ticketPlanEligibilityService;
         }
 
         [HttpGet]
@@ -28,11 +33,18 @@ namespace gym_system.Api.Controllers
             CancellationToken ct)
         {
             var result = await _ticketPlanQueryService.GetActiveTicketPlansAsync(ct);
-            var registrationPlans = result
-                .Where(x => !x.EligibilityRuleCodes.Contains(
-                    "RENEWAL",
-                    StringComparer.OrdinalIgnoreCase))
-                .ToList();
+            var context = _ticketPlanEligibilityService.CreateRegistrationContext();
+            var registrationPlans = new List<TicketPlanResult>();
+            foreach (var ticketPlan in result)
+            {
+                if (await _ticketPlanEligibilityService.CanPurchaseAsync(
+                    context,
+                    ticketPlan,
+                    ct))
+                {
+                    registrationPlans.Add(ticketPlan);
+                }
+            }
 
             return Ok(MapResponse(registrationPlans));
         }

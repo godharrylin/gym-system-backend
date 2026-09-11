@@ -2,7 +2,7 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
 {
     public sealed class RenewalTicketPlanEligibilityRule : ITicketPlanEligibilityRule
     {
-        private const string RenewalRuleCode = "RENEWAL";
+        private const string RenewalRuleCode = TicketPlanRulePolicy.Renewal;
         private readonly RenewalTicketPassEligibilityService _renewalEligibilityService;
         public string RuleCode => RenewalRuleCode;
 
@@ -25,7 +25,7 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
             CancellationToken ct)
         {
             return await _renewalEligibilityService.FindEligibleSourceAsync(
-                context.StudentId,
+                context.StudentId!,
                 ticketPlan.FamilyCode,
                 context.Now,
                 acquireLock: false,

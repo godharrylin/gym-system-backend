@@ -167,6 +167,29 @@ namespace gym_system.Application.Tests
         }
 
         [Fact]
+        public async Task Handle_ShouldRejectNewOnlyTicketPurchase_InRegistrationContext()
+        {
+            var sut = CreateSut();
+            var command = new RegisterMembersCommand
+            {
+                Members = [new MemberRegisterInput { Name = "A", Phone = "0912000001" }],
+                TicketPurchase = new TicketPurchaseInput
+                {
+                    TicketPlanKindId = "NEW_ONLY",
+                    PaymentStatus = PaymentState.UnPaid
+                }
+            };
+
+            var error = await Assert.ThrowsAsync<TicketPurchaseRejectedException>(
+                () => sut.Handler.Handle(command));
+
+            Assert.Equal("TICKET_PLAN_NOT_AVAILABLE", error.Code);
+            Assert.Empty(sut.OrderRepository.StoredOrders);
+            Assert.Empty(sut.PassRepository.StoredPasses);
+            Assert.Equal(1, sut.UnitOfWork.RollbackCount);
+        }
+
+        [Fact]
         public async Task Handle_ShouldIssueFiveSinglePasses_WhenQuantityIsFive()
         {
             var sut = CreateSut();
@@ -597,6 +620,17 @@ namespace gym_system.Application.Tests
                         Price = 250m,
                         Days = 0,
                         Sessions = 1
+                    },
+                    new TicketPlanResult
+                    {
+                        Id = "NEW_ONLY",
+                        Type = "PACK",
+                        Name = "New Only",
+                        Price = 2300m,
+                        Days = 90,
+                        Sessions = 10,
+                        Tags = ["NEW_ONLY"],
+                        EligibilityRuleCodes = ["NEW_ONLY"]
                     }
                 ];
                 return Task.FromResult(plans);

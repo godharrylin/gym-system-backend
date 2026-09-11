@@ -4,6 +4,9 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
     {
         string RuleCode { get; }
 
+        // New rules must explicitly opt in to the registration context.
+        bool SupportsRegistration => false;
+
         //  是否將規則套用到票券上
         bool AppliesTo(TicketPlanResult ticketPlan);
 

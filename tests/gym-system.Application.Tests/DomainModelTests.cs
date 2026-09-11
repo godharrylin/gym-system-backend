@@ -144,6 +144,33 @@ public sealed class DomainModelTests
     }
 
     [Fact]
+    public void SinglePassYield_ShouldReturnToUnActiveWithoutEndingPass()
+    {
+        var plan = new TicketPlanKind
+        {
+            Id = "SINGLE",
+            Name = "Single",
+            FamilyCode = "SINGLE",
+            Type = TicketPlanType.Pack,
+            Price = 250,
+            DefaultCredit = 1,
+            DefaultExpireDays = null,
+            IsActive = true
+        };
+        var pass = TicketPass.IssueQueued("PASS-1", "U1", "O1", "I1", plan);
+        pass.Activate(new DateOnly(2026, 8, 15));
+
+        pass.YieldSingleToQueue();
+
+        Assert.Equal(TicketValidStatus.UnActive, pass.ValidStatus);
+        Assert.Equal(1, pass.CreditsRemaining);
+        Assert.Null(pass.ValidStartDate);
+        Assert.Null(pass.ValidEndDate);
+        Assert.Null(pass.EndReason);
+        Assert.Null(pass.EndedAt);
+    }
+
+    [Fact]
     public void TicketPassCancel_ShouldKeepRenewalSourceAndWriteCancelledEndState()
     {
         var plan = new TicketPlanKind

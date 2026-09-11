@@ -2,8 +2,8 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
 {
     public sealed class NewOnlyTicketPlanEligibilityRule : ITicketPlanEligibilityRule
     {
-        private const string NewOnlyRuleCode = "NEW_ONLY";
-        private const int NewStudentEligibleDays = 30;
+        private const string NewOnlyRuleCode = TicketPlanRulePolicy.NewOnly;
+        private const int NewStudentEligibleDaysIncludingAssignedDate = 30;
         private readonly IStudentTicketPurchaseHistoryQueryService _purchaseHistoryQueryService;
         public string RuleCode => NewOnlyRuleCode;
 
@@ -30,16 +30,18 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
                 return false;
             }
 
-            //  判斷是否新會員
-            var eligibleSince = context.Now.AddDays(-NewStudentEligibleDays);
-            if (context.StudentAssignedAt.Value < eligibleSince)
+            var today = DateOnly.FromDateTime(context.Now);
+            var assignedDate = DateOnly.FromDateTime(context.StudentAssignedAt.Value);
+            var earliestEligibleDate = today.AddDays(
+                -(NewStudentEligibleDaysIncludingAssignedDate - 1));
+            if (assignedDate < earliestEligibleDate)
             {
                 return false;
             }
 
             //  判斷是否買過此方案
             var hasPurchased = await _purchaseHistoryQueryService.HasPurchasedTicketPlanAsync(
-                context.StudentId,
+                context.StudentId!,
                 ticketPlan.Id,
                 ct);
 

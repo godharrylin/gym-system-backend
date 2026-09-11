@@ -15,6 +15,7 @@ namespace gym_system.Api.Contracts.TicketPasses
         public required string PaymentStatus { get; init; }
         public required decimal UnitPrice { get; init; }
         public required string PaidAt { get; init; }
+        public required string PaidAtTimestamp { get; init; }
         public string? ValidStartDate { get; init; }
         public string? ValidEndDate { get; init; }
         public int? CreditsTotal { get; init; }

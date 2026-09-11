@@ -101,7 +101,7 @@ public sealed class RenewalTicketPassEligibilityServiceTests
     }
 
     [Fact]
-    public async Task FindEligibleSourceAsync_ShouldRejectCancellationRetryOnFollowingDay()
+    public async Task FindEligibleSourceAsync_ShouldAllowCancellationRetryOnFollowingDay()
     {
         var repository = CreateRepository(source =>
         {
@@ -114,6 +114,27 @@ public sealed class RenewalTicketPassEligibilityServiceTests
             "U1",
             "MONTHLY",
             new DateTime(2026, 9, 2),
+            acquireLock: false,
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.True(result.IsCancellationRetry);
+    }
+
+    [Fact]
+    public async Task FindEligibleSourceAsync_ShouldRejectCancellationRetryAfterFollowingDay()
+    {
+        var repository = CreateRepository(source =>
+        {
+            source.HasCancelledRenewal = true;
+            source.LastCancelledRenewalAt = new DateTime(2026, 9, 1, 23, 59, 0);
+        });
+        var service = new RenewalTicketPassEligibilityService(repository);
+
+        var result = await service.FindEligibleSourceAsync(
+            "U1",
+            "MONTHLY",
+            new DateTime(2026, 9, 3),
             acquireLock: false,
             CancellationToken.None);
 

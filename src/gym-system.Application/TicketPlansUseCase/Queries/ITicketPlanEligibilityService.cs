@@ -7,6 +7,8 @@ namespace gym_system.Application.TicketPlansUseCase.Queries
             string studentId,
             CancellationToken ct);
 
+        StudentTicketPlanEligibilityContext CreateRegistrationContext();
+
         Task<bool> CanPurchaseAsync(
             StudentTicketPlanEligibilityContext context,
             TicketPlanResult ticketPlan,

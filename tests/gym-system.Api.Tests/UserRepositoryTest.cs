@@ -12,8 +12,16 @@ using Xunit.Abstractions;
 
 namespace gym_system.Api.Tests
 {
-    public sealed class UserRepositoryTest
+    [Collection("Ticket SQL")]
+    public sealed class UserRepositoryTest : IAsyncLifetime
     {
+        private readonly TicketSqlFixture _fixture = new();
+        public Task InitializeAsync() => Task.CompletedTask;
+        public async Task DisposeAsync()
+        {
+            await _sp.DisposeAsync();
+            await _fixture.DisposeAsync();
+        }
         private readonly ServiceProvider _sp;
         private readonly ITestOutputHelper _output;
         public UserRepositoryTest(ITestOutputHelper output) 
@@ -43,16 +51,12 @@ namespace gym_system.Api.Tests
             var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
             CancellationToken ct = new CancellationToken();
 
-            var phones = new List<string>
-            {
-                "0911111111",
-                "0922222222",
-                "0933333333",
-                "0944444444",
-                "0912345678"
-            };
+            var userId = await _fixture.AddStudent();
+            var testUser = (await userRepo.FindUserByIdAsync(userId, ct))!;
+            var phones = new List<string> { testUser.Phone };
 
             var result = await userRepo.GetExistingPhonesAsync(phones, ct);
+            Assert.Equal(phones, result);
             _output.WriteLine("If exist:");
             foreach (var phone in result)
             {
@@ -62,9 +66,10 @@ namespace gym_system.Api.Tests
             _output.WriteLine("If not exist:");
             phones = new List<string> 
             {
-                "0955688779"
+                _fixture.NewPhone()
             };
             result = await userRepo.GetExistingPhonesAsync(phones, ct);
+            Assert.Empty(result);
             foreach (var phone in result)
             {
                 _output.WriteLine(phone);
@@ -77,8 +82,11 @@ namespace gym_system.Api.Tests
             using var scope = _sp.CreateAsyncScope();
             var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
             CancellationToken ct = new CancellationToken();
-            var user = await userRepo.FindUserByPhoneAsync("0900000000", ct);
+            var userId = await _fixture.AddStudent();
+            var testUser = (await userRepo.FindUserByIdAsync(userId, ct))!;
+            var user = await userRepo.FindUserByPhoneAsync(testUser.Phone, ct);
             Assert.NotNull(user);
+            Assert.Equal(userId, user.Id);
             _output.WriteLine($"User Id:{user.Id}, Phone: {user.Phone}, isactive: {user.IsActive}");
 
         }

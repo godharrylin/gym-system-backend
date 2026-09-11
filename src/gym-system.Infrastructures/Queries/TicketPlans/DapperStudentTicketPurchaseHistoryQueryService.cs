@@ -24,12 +24,8 @@ namespace gym_system.Infrastructures.Queries.TicketPlans
                         CASE WHEN EXISTS (
                             SELECT 1
                             FROM dbo.sdt_ticket_pass AS pass
-                            INNER JOIN dbo.order_items AS item
-                                ON item.order_items_sn = pass.order_items_sn
                             WHERE pass.owner_id = @studentId
-                                AND item.order_items_type = 'Ticket'
-                                AND item.order_items_ref_id = @ticketPlanCode
-                                AND item.order_items_payment_state <> 'Cancel'
+                                AND pass.ticket_plan_kind_code = @ticketPlanCode
                         )
                         THEN 1 ELSE 0 END
                     AS bit);
