@@ -3,6 +3,7 @@ using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Users;
 using gym_system.Domain.Enums;
+using gym_system.Domain.Exceptions;
 using gym_system.Domain.Repositories;
 
 namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
@@ -47,7 +48,9 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
                 var existingPhones = await _userRepository.GetExistingPhonesAsync(phones, ct);
                 if (existingPhones.Count > 0)
                 {
-                    throw new InvalidOperationException("手機號碼已被註冊");
+                    throw new MemberRegistrationRejectedException(
+                        "MEMBER_PHONE_ALREADY_REGISTERED",
+                        "手機號碼已被註冊");
                 }
 
                 var registeredUserIds = new List<string>(command.Members.Count);
@@ -111,26 +114,34 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
         {
             if (command.Members.Count == 0)
             {
-                throw new InvalidOperationException("至少需要一位會員");
+                throw new MemberRegistrationRejectedException(
+                    "MEMBERS_REQUIRED",
+                    "至少需要一位會員");
             }
 
             foreach (var member in command.Members)
             {
                 if (string.IsNullOrWhiteSpace(member.Name))
                 {
-                    throw new InvalidOperationException("姓名必填");
+                    throw new MemberRegistrationRejectedException(
+                        "MEMBER_NAME_REQUIRED",
+                        "姓名必填");
                 }
 
                 if (string.IsNullOrWhiteSpace(member.Phone))
                 {
-                    throw new InvalidOperationException("手機必填");
+                    throw new MemberRegistrationRejectedException(
+                        "MEMBER_PHONE_REQUIRED",
+                        "手機必填");
                 }
             }
 
             if (command.TicketPurchase is not null
                 && string.IsNullOrWhiteSpace(command.TicketPurchase.TicketPlanKindId))
             {
-                throw new InvalidOperationException("票券方案必填");
+                throw new MemberRegistrationRejectedException(
+                    "TICKET_PLAN_REQUIRED",
+                    "票券方案必填");
             }
         }
 
@@ -138,7 +149,9 @@ namespace gym_system.Application.MembersUseCase.Commands.RegisterMember
         {
             if (phones.Count != phones.Distinct(StringComparer.Ordinal).Count())
             {
-                throw new InvalidOperationException("請求內有重複手機號碼");
+                throw new MemberRegistrationRejectedException(
+                    "DUPLICATE_PHONE_IN_REQUEST",
+                    "請求內有重複手機號碼");
             }
         }
     }

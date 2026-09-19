@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using gym_system.Api.Contracts;
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
 using gym_system.Domain.Enums;
 using gym_system.Domain.Exceptions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace gym_system.Api.Controllers
@@ -18,6 +20,7 @@ namespace gym_system.Api.Controllers
         }
 
         [HttpPost("register")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Register([FromBody] RegisterMembersRequest request, CancellationToken ct)
         {
             try
@@ -45,28 +48,45 @@ namespace gym_system.Api.Controllers
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new { code = "TICKET_PLAN_NOT_AVAILABLE", message = ex.Message });
+                return NotFound(CreateError("TICKET_PLAN_NOT_AVAILABLE", ex.Message));
             }
             catch (TicketPurchaseRejectedException ex)
             {
-                return Conflict(new { code = ex.Code, message = ex.Message });
+                return Conflict(CreateError(ex.Code, ex.Message));
+            }
+            catch (MemberRegistrationRejectedException ex)
+            {
+                var error = CreateError(ex.Code, ex.Message);
+                return ex.Code == "MEMBER_PHONE_ALREADY_REGISTERED"
+                    ? Conflict(error)
+                    : BadRequest(error);
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { code = "MEMBER_REGISTRATION_REJECTED", message = ex.Message });
+                return BadRequest(CreateError("MEMBER_REGISTRATION_REJECTED", ex.Message));
             }
+        }
+
+        private ApiErrorResponse CreateError(string code, string message)
+        {
+            return new ApiErrorResponse
+            {
+                Code = code,
+                Message = message,
+                TraceId = Activity.Current?.Id ?? HttpContext.TraceIdentifier
+            };
         }
 
         private static PaymentState ParsePaymentState(string status)
         {
-            if (status.Equals("PAID", StringComparison.OrdinalIgnoreCase) ||
-                status.Equals("Paid", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(status, "PAID", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "Paid", StringComparison.OrdinalIgnoreCase))
             {
                 return PaymentState.Paid;
             }
 
-            if (status.Equals("UNPAID", StringComparison.OrdinalIgnoreCase) ||
-                status.Equals("UnPaid", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(status, "UNPAID", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "UnPaid", StringComparison.OrdinalIgnoreCase))
             {
                 return PaymentState.UnPaid;
             }

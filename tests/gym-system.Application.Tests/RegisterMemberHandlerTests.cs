@@ -20,7 +20,9 @@ namespace gym_system.Application.Tests
             var sut = CreateSut();
             var command = new RegisterMembersCommand { Members = [] };
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+            var error = await Assert.ThrowsAsync<MemberRegistrationRejectedException>(
+                () => sut.Handler.Handle(command));
+            Assert.Equal("MEMBERS_REQUIRED", error.Code);
             Assert.Equal(0, sut.UnitOfWork.BeginCount);
         }
 
@@ -37,7 +39,9 @@ namespace gym_system.Application.Tests
                 ]
             };
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+            var error = await Assert.ThrowsAsync<MemberRegistrationRejectedException>(
+                () => sut.Handler.Handle(command));
+            Assert.Equal("DUPLICATE_PHONE_IN_REQUEST", error.Code);
             Assert.Equal(0, sut.UnitOfWork.BeginCount);
         }
 
@@ -55,7 +59,9 @@ namespace gym_system.Application.Tests
                 ]
             };
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+            var error = await Assert.ThrowsAsync<MemberRegistrationRejectedException>(
+                () => sut.Handler.Handle(command));
+            Assert.Equal("MEMBER_PHONE_ALREADY_REGISTERED", error.Code);
             Assert.Equal(1, sut.UnitOfWork.BeginCount);
             Assert.Equal(1, sut.UnitOfWork.RollbackCount);
         }

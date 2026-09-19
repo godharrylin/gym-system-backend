@@ -1,5 +1,6 @@
 ﻿using gym_system.Api.Contracts.TicketPlans;
 using gym_system.Application.TicketPlansUseCase.Queries;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace gym_system.Api.Controllers
@@ -29,6 +30,7 @@ namespace gym_system.Api.Controllers
         }
 
         [HttpGet("registration-purchasable")]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<GetTicketPlansResponse>> GetRegistrationPurchasableAsync(
             CancellationToken ct)
         {

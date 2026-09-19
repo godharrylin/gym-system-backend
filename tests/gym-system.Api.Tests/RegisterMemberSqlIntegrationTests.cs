@@ -94,9 +94,55 @@ public sealed class RegisterMemberSqlIntegrationTests
         using var scope = f.Provider.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var existing = (await repo.FindUserByIdAsync(user, default))!;
-        var error = await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(() => f.Transaction(async sp =>
+        var error = await Assert.ThrowsAsync<gym_system.Domain.Exceptions.MemberRegistrationRejectedException>(() => f.Transaction(async sp =>
             await sp.GetRequiredService<IUserRepository>().AddAsync(User.Register(f.Marker, existing.Phone, "test-only"), default)));
-        Assert.Contains(error.Number, new[] { 2601, 2627 });
+        Assert.Equal("MEMBER_PHONE_ALREADY_REGISTERED", error.Code);
+        var sqlError = Assert.IsType<Microsoft.Data.SqlClient.SqlException>(error.InnerException);
+        Assert.Contains(sqlError.Number, new[] { 2601, 2627 });
         Assert.NotNull(await repo.FindUserByIdAsync(user, default));
+    }
+
+    [SqlServerFact]
+    public async Task ConcurrentRegistrationWithSamePhone_ShouldCreateAtMostOneMember()
+    {
+        await using var f = new TicketSqlFixture();
+        var phone = f.NewPhone();
+
+        async Task<(RegisterMembersResult? Result, Exception? Error)> Register()
+        {
+            using var scope = f.Provider.CreateScope();
+            try
+            {
+                var result = await scope.ServiceProvider
+                    .GetRequiredService<RegisterMemberHandler>()
+                    .Handle(new RegisterMembersCommand
+                    {
+                        Members = [new MemberRegisterInput { Name = f.Marker, Phone = phone }]
+                    });
+                return (result, null);
+            }
+            catch (Exception error)
+            {
+                return (null, error);
+            }
+        }
+
+        var attempts = await Task.WhenAll(Register(), Register());
+        var success = Assert.Single(attempts, attempt => attempt.Result is not null);
+        var failure = Assert.Single(attempts, attempt => attempt.Error is not null);
+        var userId = Assert.Single(success.Result!.MemberIds);
+        f.TrackUser(userId);
+
+        var registrationError = Assert.IsType<gym_system.Domain.Exceptions.MemberRegistrationRejectedException>(
+            failure.Error);
+        Assert.Equal("MEMBER_PHONE_ALREADY_REGISTERED", registrationError.Code);
+
+        using var connection = f.Open();
+        Assert.Equal(
+            1,
+            await Dapper.SqlMapper.ExecuteScalarAsync<int>(
+                connection,
+                "SELECT COUNT(*) FROM dbo.users WHERE usr_phone=@phone",
+                new { phone }));
     }
 }

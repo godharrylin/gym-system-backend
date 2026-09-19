@@ -1,5 +1,6 @@
 using System.Text;
 using gym_system.Api.Authentication;
+using gym_system.Api.Errors;
 using gym_system.Application.AuthUseCase.LoginByPhone;
 using gym_system.Application.AuthUseCase.RefreshAuthToken;
 using gym_system.Application.AuthUseCase.Tokens;
@@ -33,6 +34,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()
     ?? throw new InvalidOperationException("Jwt 設定缺少");
@@ -123,6 +126,7 @@ builder.Services.AddScoped<ITicketPlanEligibilityRule, RenewalTicketPlanEligibil
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseExceptionHandler();
 app.UseHttpsRedirection();
 
 app.UseCors("Frontend");

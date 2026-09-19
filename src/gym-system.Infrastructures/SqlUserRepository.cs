@@ -1,7 +1,9 @@
 ﻿using Dapper;
 using gym_system.Domain.Entities.Users;
+using gym_system.Domain.Exceptions;
 using gym_system.Domain.Repositories;
 using gym_system.Infrastructures.Connections;
+using Microsoft.Data.SqlClient;
 
 
 namespace gym_system.Infrastructures
@@ -46,15 +48,25 @@ namespace gym_system.Infrastructures
                         VALUES (@Name, @Phone, @Password, @IsActive)
                     """;
 
-            var createdUserId = await _session.Connection.QuerySingleAsync<string>(
-                new CommandDefinition(
-                    sql,
-                    user,
-                    transaction: _session.Transaction,
-                    cancellationToken: ct)
-            );
+            try
+            {
+                var createdUserId = await _session.Connection.QuerySingleAsync<string>(
+                    new CommandDefinition(
+                        sql,
+                        user,
+                        transaction: _session.Transaction,
+                        cancellationToken: ct)
+                );
 
-            return createdUserId;
+                return createdUserId;
+            }
+            catch (SqlException ex) when (ex.Number is 2601 or 2627)
+            {
+                throw new MemberRegistrationRejectedException(
+                    "MEMBER_PHONE_ALREADY_REGISTERED",
+                    "手機號碼已被註冊",
+                    ex);
+            }
         }
 
         public async Task<User?> FindUserByIdAsync(string userId, CancellationToken ct)
