@@ -46,6 +46,8 @@ namespace gym_system.Infrastructures
         //  MS SQL
         public static IServiceCollection AddInfrastructureSql(this IServiceCollection services)
         {
+            services.AddScoped<gym_system.Application.MembersUseCase.Queries.GetStudentMemberList.IStudentMemberListQueryService,
+                gym_system.Infrastructures.Queries.Students.DapperStudentMemberListQueryService>();
             services.AddCommonInfrastructure();
             services.AddScoped<IUnitOfWork, SqlUnitOfWork>();
 

@@ -167,15 +167,23 @@ namespace gym_system.Infrastructures
                     WHERE usr_id = @userId
                 ";
 
-            var affected = await _session.Connection.ExecuteAsync(
-                new CommandDefinition(
-                    sql,
-                    parameters,
-                    transaction: _session.Transaction,
-                    cancellationToken: ct)
-            );
+            try
+            {
+                var affected = await _session.Connection.ExecuteAsync(
+                    new CommandDefinition(
+                        sql,
+                        parameters,
+                        transaction: _session.Transaction,
+                        cancellationToken: ct)
+                );
 
-            return affected > 0;
+                return affected > 0;
+            }
+            catch (SqlException ex) when (ex.Number is 2601 or 2627)
+            {
+                throw new MemberRegistrationRejectedException(
+                    "MEMBER_PHONE_ALREADY_REGISTERED", "手機號碼已被其他使用者註冊", ex);
+            }
         }
 
         private sealed class UserRow
