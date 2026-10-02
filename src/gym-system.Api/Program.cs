@@ -115,6 +115,8 @@ builder.Services.AddScoped<GetStudentTicketPassesHandler>();
 builder.Services.AddScoped<TicketPurchaseService>();
 builder.Services.AddScoped<UnpaidTicketOrderPaymentService>();
 builder.Services.AddScoped<RegisterMemberHandler>();
+builder.Services.AddScoped<gym_system.Application.MembersUseCase.Queries.GetStudentMemberList.GetStudentMemberListHandler>();
+builder.Services.AddScoped<gym_system.Application.MembersUseCase.Commands.UpdateStudent.UpdateStudentHandler>();
 builder.Services.AddScoped<ITicketPlanEligibilityService, TicketPlanEligibilityService>();
 builder.Services.AddScoped<RenewalTicketPassEligibilityService>();
 builder.Services.AddScoped<ITicketPlanEligibilityRule, NewOnlyTicketPlanEligibilityRule>();
