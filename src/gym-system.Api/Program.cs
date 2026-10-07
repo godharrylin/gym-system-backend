@@ -83,6 +83,7 @@ turnstileSettings.Validate();
 builder.Services.AddSingleton(turnstileSettings);
 builder.Services.AddSingleton<DeviceTestCommandGate>();
 builder.Services.AddScoped<SendDeviceTestCommandHandler>();
+builder.Services.AddScoped<GetDeviceTestStatusHandler>();
 builder.Services.AddHttpClient<ITurnstileCommandClient, CloudServerTurnstileClient>(client =>
 {
     client.BaseAddress = new Uri(turnstileSettings.BaseUrl);

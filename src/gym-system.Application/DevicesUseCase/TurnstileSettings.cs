@@ -31,7 +31,11 @@ public sealed class DeviceCommandException(string code, string message, int stat
 public interface ITurnstileCommandClient
 {
     Task OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct);
+    Task<ControllerStatusSnapshot> QueryStatusAsync(int controllerSN, CancellationToken ct);
 }
+
+public sealed record ControllerStatusSnapshot(int ControllerSN, string ControllerTime,
+    IReadOnlyDictionary<string, string> DoorStates);
 
 // One process, one configured controller. No queuing and no distributed locking.
 public sealed class DeviceTestCommandGate
