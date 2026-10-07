@@ -3,14 +3,19 @@ namespace gym_system.Application.DevicesUseCase;
 public sealed class TurnstileSettings
 {
     public bool DeviceTestEnabled { get; set; }
+    public string Mode { get; set; } = "Real";
     public string BaseUrl { get; set; } = "http://localhost:61080/";
     public int ControllerSN { get; set; } = 253260812;
     public int EntryDoorNo { get; set; } = 1;
     public int ExitDoorNo { get; set; } = 2;
     public int TimeoutSeconds { get; set; } = 5;
 
-    public void Validate()
+    public void Validate(bool isProduction = false)
     {
+        if (Mode is not ("Real" or "Mock"))
+            throw new InvalidOperationException("Turnstile:Mode 只接受 Real 或 Mock。");
+        if (isProduction && Mode == "Mock")
+            throw new InvalidOperationException("Production 環境禁止使用 Turnstile Mock 模式。");
         if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out var uri)
             || (uri.Scheme != "http" && uri.Scheme != "https")
             || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Fragment))
@@ -30,8 +35,8 @@ public sealed class DeviceCommandException(string code, string message, int stat
 
 public interface ITurnstileCommandClient
 {
-    Task OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct);
-    Task<ControllerStatusSnapshot> QueryStatusAsync(int controllerSN, CancellationToken ct);
+    Task<TurnstileCommandResult> OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct);
+    Task<TurnstileCommandResult> QueryStatusAsync(int controllerSN, CancellationToken ct);
 }
 
 public sealed record ControllerStatusSnapshot(int ControllerSN, string ControllerTime,

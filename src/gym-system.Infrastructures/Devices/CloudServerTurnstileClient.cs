@@ -11,12 +11,31 @@ public sealed class CloudServerTurnstileClient(
 {
     private static long nextId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-    public async Task OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct)
+    public async Task<TurnstileCommandResult> OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct)
     {
-        await SendAsync(controllerSN, doorNo, "RemoteOpenDoor", ct);
+        ct.ThrowIfCancellationRequested();
+        if (!TurnstileCommandResult.IsValidTarget(controllerSN, doorNo)) return TurnstileCommandResult.InvalidTarget(false);
+        try
+        {
+            await SendAsync(controllerSN, doorNo, "RemoteOpenDoor", ct);
+            return TurnstileCommandResult.Accepted(false);
+        }
+        catch (DeviceCommandException error) { return TurnstileCommandResult.FromFailure(error); }
     }
 
-    public async Task<ControllerStatusSnapshot> QueryStatusAsync(int controllerSN, CancellationToken ct)
+    public async Task<TurnstileCommandResult> QueryStatusAsync(int controllerSN, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!TurnstileCommandResult.IsValidTarget(controllerSN)) return TurnstileCommandResult.InvalidTarget(false);
+        try
+        {
+            var snapshot = await ReadStatusAsync(controllerSN, ct);
+            return TurnstileCommandResult.Accepted(false, snapshot);
+        }
+        catch (DeviceCommandException error) { return TurnstileCommandResult.FromFailure(error); }
+    }
+
+    private async Task<ControllerStatusSnapshot> ReadStatusAsync(int controllerSN, CancellationToken ct)
     {
         var result = await SendAsync(controllerSN, null, "QueryControllerStatus", ct);
         if (!result.TryGetProperty("ControllerInformation", out var info) || info.ValueKind != JsonValueKind.Object
@@ -44,7 +63,7 @@ public sealed class CloudServerTurnstileClient(
         var id = Interlocked.Increment(ref nextId);
         var activityId = Activity.Current?.Id;
         logger.LogInformation(
-            "Turnstile request Method={Method} ControllerSN={ControllerSN} DoorNO={DoorNO} RpcId={RpcId} ActivityId={ActivityId}",
+            "Turnstile request Mode=Real Method={Method} ControllerSN={ControllerSN} DoorNO={DoorNO} RpcId={RpcId} ActivityId={ActivityId}",
             method, controllerSN, doorNo, id, activityId);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(settings.TimeoutSeconds));

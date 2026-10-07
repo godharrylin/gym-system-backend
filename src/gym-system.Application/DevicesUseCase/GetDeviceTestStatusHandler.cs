@@ -3,7 +3,7 @@ namespace gym_system.Application.DevicesUseCase;
 public sealed class GetDeviceTestStatusHandler(
     ITurnstileCommandClient client, TurnstileSettings settings, DeviceTestCommandGate gate)
 {
-    public async Task<ControllerStatusSnapshot> Handle(CancellationToken ct)
+    public async Task<TurnstileCommandResult> Handle(CancellationToken ct)
     {
         if (!settings.DeviceTestEnabled)
             throw new DeviceCommandException("DEVICE_TEST_DISABLED", "Device Test 尚未開放。", 403);

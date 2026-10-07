@@ -26,15 +26,21 @@ public sealed class DeviceTestsController(
         using var scope = logger.BeginScope(new Dictionary<string, object> { ["TraceId"] = traceId });
         var elapsed = Stopwatch.StartNew();
         var outcome = "Unknown";
+        bool? simulated = null;
         try
         {
-            var snapshot = await statusHandler.Handle(ct);
+            var result = await statusHandler.Handle(ct);
+            simulated = result.IsSimulated;
+            outcome = result.Code;
+            if (!result.Succeeded) return ResultError(result, traceId);
+            var snapshot = result.Snapshot ?? throw new InvalidOperationException("Successful status result requires a snapshot.");
             outcome = "QuerySucceeded";
             return Ok(new
             {
                 Status = outcome, snapshot.ControllerSN, snapshot.ControllerTime, snapshot.DoorStates,
+                result.Succeeded, result.IsSimulated, result.Code, Outcome = result.Outcome.ToString(),
                 CheckedAt = DateTimeOffset.UtcNow,
-                Message = "本次控制器狀態查詢成功；不代表持續在線或實際通行。", TraceId = traceId
+                result.Message, TraceId = traceId
             });
         }
         catch (DeviceCommandException ex)
@@ -54,8 +60,8 @@ public sealed class DeviceTestsController(
         }
         finally
         {
-            logger.LogInformation("Device status Operator={OperatorId} Outcome={Outcome} ElapsedMs={ElapsedMs} TraceId={TraceId} ActivityId={ActivityId}",
-                operatorId, outcome, elapsed.ElapsedMilliseconds, traceId, Activity.Current?.Id);
+            logger.LogInformation("Device status Operator={OperatorId} Outcome={Outcome} IsSimulated={IsSimulated} ElapsedMs={ElapsedMs} TraceId={TraceId} ActivityId={ActivityId}",
+                operatorId, outcome, simulated, elapsed.ElapsedMilliseconds, traceId, Activity.Current?.Id);
         }
     }
 
@@ -72,14 +78,19 @@ public sealed class DeviceTestsController(
             return StatusCode(403, new ApiErrorResponse
             { Code = "DEVICE_OPERATOR_REQUIRED", Message = "缺少操作者身分。", TraceId = traceId });
         var outcome = "Unknown";
+        bool? simulated = null;
         try
         {
-            await handler.Handle(request.Direction, ct);
+            var result = await handler.Handle(request.Direction, ct);
+            simulated = result.IsSimulated;
+            outcome = result.Code;
+            if (!result.Succeeded) return ResultError(result, traceId);
             outcome = "CommandAccepted";
             return Ok(new
             {
                 Status = outcome, request.Direction,
-                Message = "控制器確認開門指令執行成功；未確認實際通行。", TraceId = traceId
+                result.Succeeded, result.IsSimulated, result.Code, Outcome = result.Outcome.ToString(),
+                result.Message, TraceId = traceId
             });
         }
         catch (DeviceCommandException ex)
@@ -102,8 +113,23 @@ public sealed class DeviceTestsController(
         }
         finally
         {
-            logger.LogInformation("Device test Operator={OperatorId} Direction={Direction} Outcome={Outcome} ElapsedMs={ElapsedMs} TraceId={TraceId} ActivityId={ActivityId}",
-                operatorId, request.Direction, outcome, elapsed.ElapsedMilliseconds, traceId, Activity.Current?.Id);
+            logger.LogInformation("Device test Operator={OperatorId} Direction={Direction} Outcome={Outcome} IsSimulated={IsSimulated} ElapsedMs={ElapsedMs} TraceId={TraceId} ActivityId={ActivityId}",
+                operatorId, request.Direction, outcome, simulated, elapsed.ElapsedMilliseconds, traceId, Activity.Current?.Id);
         }
+    }
+
+    private ObjectResult ResultError(TurnstileCommandResult result, string traceId)
+    {
+        var status = result.Code switch
+        {
+            "CONTROL_COMMAND_TIMEOUT" => 504,
+            "INVALID_DEVICE_TARGET" => 400,
+            _ => 502
+        };
+        return StatusCode(status, new ApiErrorResponse
+        {
+            Code = result.Code, Message = result.Message, TraceId = traceId,
+            Succeeded = result.Succeeded, IsSimulated = result.IsSimulated, Outcome = result.Outcome.ToString()
+        });
     }
 }

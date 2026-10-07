@@ -37,7 +37,10 @@ public sealed class DeviceTestTests
             Assert.Equal(doorNo, param.GetProperty("DoorNO").GetInt32());
             return Success(root.GetProperty("id").GetInt64());
         });
-        await CreateHandler(transport).Handle(direction, default);
+        var result = await CreateHandler(transport).Handle(direction, default);
+        Assert.True(result.Succeeded);
+        Assert.False(result.IsSimulated);
+        Assert.Equal(TurnstileOutcome.Succeeded, result.Outcome);
         Assert.Equal(1, transport.Calls);
     }
 
@@ -73,9 +76,9 @@ public sealed class DeviceTestTests
     public async Task BadResponsesNeverRetry(string body, string expectedCode)
     {
         var transport = new FakeHttp((_, _) => Task.FromResult(Reply(body)));
-        var error = await Assert.ThrowsAsync<DeviceCommandException>(() => CreateHandler(transport).Handle("Entry", default));
+        var error = await AssertFailedResult(() => CreateHandler(transport).Handle("Entry", default));
         Assert.Equal(expectedCode, error.Code);
-        Assert.Equal(502, error.StatusCode);
+        Assert.NotEqual(TurnstileOutcome.Succeeded, error.Outcome);
         Assert.Equal(1, transport.Calls);
     }
 
@@ -93,7 +96,7 @@ public sealed class DeviceTestTests
             return Reply(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = wrongId ? id + 1 : id,
                 result = new { success, code, ControllerSN = sn } }));
         });
-        var error = await Assert.ThrowsAsync<DeviceCommandException>(() => CreateHandler(transport).Handle("Exit", default));
+        var error = await AssertFailedResult(() => CreateHandler(transport).Handle("Exit", default));
         Assert.Equal(expected, error.Code);
         Assert.Equal(1, transport.Calls);
     }
@@ -102,7 +105,7 @@ public sealed class DeviceTestTests
     public async Task HttpErrorNeverRetries()
     {
         var transport = new FakeHttp((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
-        var error = await Assert.ThrowsAsync<DeviceCommandException>(() => CreateHandler(transport).Handle("Entry", default));
+        var error = await AssertFailedResult(() => CreateHandler(transport).Handle("Entry", default));
         Assert.Equal("CONTROL_SERVICE_HTTP_ERROR", error.Code);
         Assert.Equal(1, transport.Calls);
     }
@@ -111,7 +114,7 @@ public sealed class DeviceTestTests
     public async Task ConnectionErrorNeverRetries()
     {
         var transport = new FakeHttp((_, _) => throw new HttpRequestException("offline"));
-        var error = await Assert.ThrowsAsync<DeviceCommandException>(() => CreateHandler(transport).Handle("Entry", default));
+        var error = await AssertFailedResult(() => CreateHandler(transport).Handle("Entry", default));
         Assert.Equal("CONTROL_SERVICE_UNAVAILABLE", error.Code);
         Assert.Equal(1, transport.Calls);
     }
@@ -121,8 +124,8 @@ public sealed class DeviceTestTests
     {
         var transport = new FakeHttp(async (_, ct) =>
         { await Task.Delay(Timeout.Infinite, ct); return Reply("{}"); });
-        var error = await Assert.ThrowsAsync<DeviceCommandException>(() => CreateHandler(transport, 1).Handle("Entry", default));
-        Assert.Equal(504, error.StatusCode);
+        var error = await AssertFailedResult(() => CreateHandler(transport, 1).Handle("Entry", default));
+        Assert.Equal(TurnstileOutcome.Unknown, error.Outcome);
         Assert.Equal("CONTROL_COMMAND_TIMEOUT", error.Code);
         Assert.Equal(1, transport.Calls);
     }
@@ -206,7 +209,10 @@ public sealed class DeviceTestTests
         });
         using var http = new HttpClient(transport) { BaseAddress = new Uri("http://test.invalid/") };
         var client = new CloudServerTurnstileClient(http, Enabled(), logger);
-        var snapshot = await client.QueryStatusAsync(253260812, default);
+        var result = await client.QueryStatusAsync(253260812, default);
+        Assert.True(result.Succeeded);
+        Assert.False(result.IsSimulated);
+        var snapshot = result.Snapshot!;
         Assert.Equal("Closed", snapshot.DoorStates["Door1#"]);
         Assert.Equal("Open", snapshot.DoorStates["Door2#"]);
         Assert.Equal("2026-10-07 12:00:00", snapshot.ControllerTime);
@@ -231,18 +237,18 @@ public sealed class DeviceTestTests
         });
         using var http = new HttpClient(transport) { BaseAddress = new Uri("http://test.invalid/") };
         var client = new CloudServerTurnstileClient(http, Enabled(), NullLogger<CloudServerTurnstileClient>.Instance);
-        var error = await Assert.ThrowsAsync<DeviceCommandException>(() => client.QueryStatusAsync(253260812, default));
+        var error = await AssertFailedResult(() => client.QueryStatusAsync(253260812, default));
         Assert.Equal("CONTROL_INVALID_RESPONSE", error.Code);
         Assert.Contains("狀態", error.Message);
         Assert.Equal(1, transport.Calls);
     }
 
     [Theory]
-    [InlineData("reject", 502, "CONTROLLER_REJECTED")]
-    [InlineData("json", 502, "CONTROL_INVALID_RESPONSE")]
-    [InlineData("offline", 502, "CONTROL_SERVICE_UNAVAILABLE")]
-    [InlineData("timeout", 504, "CONTROL_COMMAND_TIMEOUT")]
-    public async Task StatusFailuresNeverRetry(string failure, int status, string code)
+    [InlineData("reject", "CONTROLLER_REJECTED")]
+    [InlineData("json", "CONTROL_INVALID_RESPONSE")]
+    [InlineData("offline", "CONTROL_SERVICE_UNAVAILABLE")]
+    [InlineData("timeout", "CONTROL_COMMAND_TIMEOUT")]
+    public async Task StatusFailuresNeverRetry(string failure, string code)
     {
         var transport = new FakeHttp(async (request, ct) =>
         {
@@ -255,8 +261,8 @@ public sealed class DeviceTestTests
         });
         using var http = new HttpClient(transport) { BaseAddress = new Uri("http://test.invalid/"), Timeout = Timeout.InfiniteTimeSpan };
         var client = new CloudServerTurnstileClient(http, Enabled(1), NullLogger<CloudServerTurnstileClient>.Instance);
-        var error = await Assert.ThrowsAsync<DeviceCommandException>(() => client.QueryStatusAsync(253260812, default));
-        Assert.Equal(status, error.StatusCode);
+        var error = await AssertFailedResult(() => client.QueryStatusAsync(253260812, default));
+        Assert.Equal(failure == "reject" ? TurnstileOutcome.Failed : TurnstileOutcome.Unknown, error.Outcome);
         Assert.Equal(code, error.Code);
         Assert.Contains("狀態", error.Message);
         Assert.Equal(1, transport.Calls);
@@ -334,10 +340,10 @@ public sealed class DeviceTestTests
         });
         using var http = new HttpClient(transport) { BaseAddress = new Uri("http://test.invalid/") };
         var client = new CloudServerTurnstileClient(http, Enabled(), logger);
-        if (accepted) await client.OpenDoorAsync(253260812, 2, default);
+        if (accepted) Assert.True((await client.OpenDoorAsync(253260812, 2, default)).Succeeded);
         else
         {
-            var error = await Assert.ThrowsAsync<DeviceCommandException>(() => client.OpenDoorAsync(253260812, 2, default));
+            var error = await AssertFailedResult(() => client.OpenDoorAsync(253260812, 2, default));
             Assert.Equal("CONTROLLER_REJECTED", error.Code);
         }
         var requestLog = Assert.Single(logger.Records, r => r.ContainsKey("DoorNO"));
@@ -361,7 +367,7 @@ public sealed class DeviceTestTests
         var transport = new FakeHttp((_, _) => Task.FromResult(Reply("{\"error\":{\"code\":-32700,\"message\":\"Parse error\"}}")));
         using var http = new HttpClient(transport) { BaseAddress = new Uri("http://test.invalid/") };
         var client = new CloudServerTurnstileClient(http, Enabled(), logger);
-        var error = await Assert.ThrowsAsync<DeviceCommandException>(() => client.OpenDoorAsync(253260812, 1, default));
+        var error = await AssertFailedResult(() => client.OpenDoorAsync(253260812, 1, default));
         Assert.Equal("CONTROLLER_REJECTED", error.Code);
         var responseLog = Assert.Single(logger.Records, r => r.ContainsKey("ErrorCode"));
         Assert.Equal("-32700", responseLog["ErrorCode"]);
@@ -387,6 +393,13 @@ public sealed class DeviceTestTests
         var http = new HttpClient(transport) { BaseAddress = new Uri("http://test.invalid/"), Timeout = Timeout.InfiniteTimeSpan };
         return new(new CloudServerTurnstileClient(http, settings, NullLogger<CloudServerTurnstileClient>.Instance), settings, gate ?? new());
     }
+    private static async Task<TurnstileCommandResult> AssertFailedResult(Func<Task<TurnstileCommandResult>> action)
+    {
+        var result = await action();
+        Assert.False(result.Succeeded);
+        Assert.False(result.IsSimulated);
+        return result;
+    }
     private static HttpResponseMessage Reply(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body) };
     private static HttpResponseMessage Success(long id) => Reply(JsonSerializer.Serialize(new
     { jsonrpc = "2.0", id, result = new { success = true, code = 1, ControllerSN = 253260812 } }));
@@ -400,11 +413,12 @@ public sealed class DeviceTestTests
     {
         public int Calls { get; private set; }
         public Func<Task> OnCall { get; set; } = () => Task.CompletedTask;
-        public Task OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct) { Calls++; return OnCall(); }
-        public async Task<ControllerStatusSnapshot> QueryStatusAsync(int controllerSN, CancellationToken ct)
+        public async Task<TurnstileCommandResult> OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct)
+        { Calls++; await OnCall(); return TurnstileCommandResult.Accepted(false); }
+        public async Task<TurnstileCommandResult> QueryStatusAsync(int controllerSN, CancellationToken ct)
         {
             Calls++; await OnCall();
-            return new(controllerSN, "2026-10-07 12:00:00", new Dictionary<string, string> { ["Door1#"] = "Closed" });
+            return TurnstileCommandResult.Accepted(false, new(controllerSN, "2026-10-07 12:00:00", new Dictionary<string, string> { ["Door1#"] = "Closed" }));
         }
     }
 }

@@ -3,7 +3,7 @@ namespace gym_system.Application.DevicesUseCase;
 public sealed class SendDeviceTestCommandHandler(
     ITurnstileCommandClient client, TurnstileSettings settings, DeviceTestCommandGate gate)
 {
-    public async Task Handle(string? direction, CancellationToken ct)
+    public async Task<TurnstileCommandResult> Handle(string? direction, CancellationToken ct)
     {
         var doorNo = direction switch
         {
@@ -18,7 +18,7 @@ public sealed class SendDeviceTestCommandHandler(
             throw new DeviceCommandException("DEVICE_BUSY", "控制器正在處理另一個測試請求，未發送此次指令。", 409);
         try
         {
-            await client.OpenDoorAsync(settings.ControllerSN, doorNo, ct);
+            return await client.OpenDoorAsync(settings.ControllerSN, doorNo, ct);
         }
         finally { gate.Exit(); }
     }
