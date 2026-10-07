@@ -1,4 +1,6 @@
 using System.Text;
+using gym_system.Application.DevicesUseCase;
+using gym_system.Infrastructures.Devices;
 using gym_system.Api.Authentication;
 using gym_system.Api.Errors;
 using gym_system.Application.AuthUseCase.LoginByPhone;
@@ -76,6 +78,16 @@ builder.Services
         };
     });
 builder.Services.AddAuthorization();
+var turnstileSettings = builder.Configuration.GetSection("Turnstile").Get<TurnstileSettings>() ?? new();
+turnstileSettings.Validate();
+builder.Services.AddSingleton(turnstileSettings);
+builder.Services.AddSingleton<DeviceTestCommandGate>();
+builder.Services.AddScoped<SendDeviceTestCommandHandler>();
+builder.Services.AddHttpClient<ITurnstileCommandClient, CloudServerTurnstileClient>(client =>
+{
+    client.BaseAddress = new Uri(turnstileSettings.BaseUrl);
+    client.Timeout = Timeout.InfiniteTimeSpan;
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
