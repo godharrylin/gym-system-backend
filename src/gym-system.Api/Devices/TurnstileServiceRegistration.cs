@@ -13,6 +13,7 @@ public static class TurnstileServiceRegistration
         services.AddSingleton<DeviceTestCommandGate>();
         services.AddScoped<SendDeviceTestCommandHandler>();
         services.AddScoped<GetDeviceTestStatusHandler>();
+        services.AddScoped<gym_system.Application.GymAccessUseCase.GatePassageService>();
         if (settings.Mode == "Mock")
             services.AddTransient<ITurnstileCommandClient, MockTurnstileCommandClient>();
         else

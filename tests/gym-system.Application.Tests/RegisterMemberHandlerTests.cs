@@ -1,5 +1,6 @@
 using gym_system.Application.MembersUseCase.Commands.RegisterMember;
 using gym_system.Application.OrdersUseCase.Services;
+using gym_system.Application.TicketsUseCase.Services;
 using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
@@ -359,7 +360,7 @@ namespace gym_system.Application.Tests
                 }
             };
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handler.Handle(command));
+            await Assert.ThrowsAsync<StudentProfileSnapshotUpdateException>(() => sut.Handler.Handle(command));
 
             Assert.Equal(1, sut.UnitOfWork.RollbackCount);
             Assert.Equal(0, sut.UnitOfWork.CommitCount);
@@ -391,7 +392,8 @@ namespace gym_system.Application.Tests
                 new RenewalTicketPassEligibilityService(passRepository),
                 orderRepository,
                 passRepository,
-                clock);
+                clock,
+                new CurrentTicketService(passRepository, profileRepository));
             var handler = new RegisterMemberHandler(
                 userRepository,
                 roleRepository,
@@ -744,7 +746,7 @@ namespace gym_system.Application.Tests
                     active = next is null ? [] : [next];
                 }
 
-                return Task.FromResult(active.SingleOrDefault()?.ToSnapshot());
+                return Task.FromResult(active.SingleOrDefault()?.ToSnapshot(updatedAt));
             }
         }
 

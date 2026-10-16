@@ -63,6 +63,9 @@ namespace gym_system.Domain.Entities.Members
     public sealed class CurrentTicketSnapshot
     {
         public string TicketId { get; init; } = string.Empty;
+        // Returned by lifecycle reconciliation, not persisted in the profile projection.
+        public string PlanCode { get; init; } = string.Empty;
+        public DateOnly? TicketStartDate { get; init; }
         public string TicketType { get; init; } = string.Empty;
         public string TicketValidState { get; init; } = string.Empty;
         public string TicketPaymentState { get; init; } = string.Empty;

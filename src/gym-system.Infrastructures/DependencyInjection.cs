@@ -2,6 +2,7 @@ using gym_system.Application.InstructorsUseCase.Queries;
 using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Application.TicketsUseCase.Queries;
+using gym_system.Application.TicketsUseCase.Services;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
@@ -46,6 +47,8 @@ namespace gym_system.Infrastructures
         //  MS SQL
         public static IServiceCollection AddInfrastructureSql(this IServiceCollection services)
         {
+            services.AddScoped<IGateDeviceRepository, Devices.SqlGateDeviceRepository>();
+            services.AddScoped<IGatePassageRepository, Devices.SqlGatePassageRepository>();
             services.AddScoped<gym_system.Application.MembersUseCase.Queries.GetStudentMemberList.IStudentMemberListQueryService,
                 gym_system.Infrastructures.Queries.Students.DapperStudentMemberListQueryService>();
             services.AddCommonInfrastructure();
@@ -65,6 +68,7 @@ namespace gym_system.Infrastructures
         //  Common Need
         private static IServiceCollection AddCommonInfrastructure(this IServiceCollection services)
         {
+            services.AddScoped<ICurrentTicketService, CurrentTicketService>();
             services.AddScoped<IUnitOfWork, NoopUnitOfWork>();
             services.AddScoped<IClock, TaipeiClock>();
             services.AddScoped<IUserRepository, SqlUserRepository>();
@@ -608,7 +612,7 @@ namespace gym_system.Infrastructures
                 break;
             }
 
-            return Task.FromResult(active.SingleOrDefault()?.Pass.ToSnapshot());
+            return Task.FromResult(active.SingleOrDefault()?.Pass.ToSnapshot(updatedAt));
         }
 
         private ActivatableInMemoryPass? FindNextActivatable(
@@ -661,7 +665,9 @@ namespace gym_system.Infrastructures
                             ?? throw new InvalidOperationException("續約票缺少付款時間"));
                     activationDate = TicketActivationSchedule.GetRenewalStartDate(
                         sourceEndDate,
-                        paidDate);
+                        paidDate,
+                        source.EndReason == TicketEndReason.Depleted
+                            ? TicketEndReason.Depleted : TicketEndReason.Expire);
                     if (activationDate > today)
                     {
                         continue;

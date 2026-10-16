@@ -1,4 +1,6 @@
 using System.Text;
+using gym_system.Application.GateDevicesUseCase;
+using gym_system.Application.GymAccessUseCase;
 using gym_system.Application.DevicesUseCase;
 using gym_system.Infrastructures.Devices;
 using gym_system.Api.Devices;
@@ -79,6 +81,8 @@ builder.Services
         };
     });
 builder.Services.AddAuthorization();
+var gateDeviceSettings = builder.Configuration.GetSection("GateDevices").Get<GateDeviceSettings>() ?? new();
+builder.Services.AddGateDevices(gateDeviceSettings);
 var turnstileSettings = builder.Configuration.GetSection("Turnstile").Get<TurnstileSettings>() ?? new();
 builder.Services.AddTurnstileControl(turnstileSettings, builder.Environment.IsProduction());
 builder.Services.AddCors(options =>
@@ -117,6 +121,7 @@ builder.Services.AddScoped<CreateOrderHandler>();
 builder.Services.AddScoped<PayOrderHandler>();
 builder.Services.AddScoped<CancelQueuedRenewalHandler>();
 builder.Services.AddScoped<GetStudentTicketPassesHandler>();
+builder.Services.AddScoped<IGymAccessEligibilityService, GymAccessEligibilityService>();
 builder.Services.AddScoped<TicketPurchaseService>();
 builder.Services.AddScoped<UnpaidTicketOrderPaymentService>();
 builder.Services.AddScoped<RegisterMemberHandler>();
@@ -134,7 +139,12 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
-app.UseHttpsRedirection();
+app.UseWhen(context => !gateDeviceSettings.AllowHttp ||
+    !context.Request.Path.StartsWithSegments("/api/v1/gate-devices"), branch => branch.UseHttpsRedirection());
+
+app.UseRouting();
+app.UseMiddleware<GateDeviceRequestGuard>();
+app.UseRateLimiter();
 
 app.UseCors("Frontend");
 

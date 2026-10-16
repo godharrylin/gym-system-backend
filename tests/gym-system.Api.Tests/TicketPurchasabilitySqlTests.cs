@@ -138,8 +138,8 @@ public sealed class TicketPurchasabilitySqlTests
         var code = await f.AddPlan(type: "PACK");
         for (var i = 0; i < 100; i++)
         {
-            var source = await f.SeedPass(user, code, "Depleted", f.Clock.Now().Date.AddDays(-10), f.Clock.Now().Date.AddDays(20),
-                endedAt: f.Clock.Now(), reason: "Depleted", remaining: 0);
+            var source = await f.SeedPass(user, code, "Expire", f.Clock.Now().Date.AddDays(-10), f.Clock.Now().Date,
+                endedAt: f.Clock.Now().Date, reason: "Expire", remaining: 0);
             await f.SeedPass(user, code, source: source.Sn);
         }
         var usable = await f.SeedPass(user, await f.AddPlan());

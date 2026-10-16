@@ -79,7 +79,7 @@ public sealed class InMemoryTicketPassReconcileTests
     public async Task FutureRenewal_ShouldNotBlockAvailableTicket(bool addStandard)
     {
         using var fixture = new Fixture();
-        var source = Source("source", TicketValidStatus.Depleted, Today);
+        var source = Source("source", TicketValidStatus.Expire, Today);
         var future = Queue("future", source: 1, paidAt: Now.AddDays(-1));
         var single = Queue("single", code: "SINGLE");
         single.Activate(Today);
@@ -127,6 +127,43 @@ public sealed class InMemoryTicketPassReconcileTests
         Assert.Equal(Today.AddDays(29), pass.ValidEndDate);
         Assert.Throws<InvalidOperationException>(pass.YieldSingleToQueue);
         Assert.Equal(TicketValidStatus.Active, pass.ValidStatus);
+    }
+
+    [Fact]
+    public async Task DepletedSource_ShouldActivatePaidRenewalOnSameDay_AndUseSuppliedTaiwanTime()
+    {
+        using var fixture = new Fixture();
+        var source = Source("source", TicketValidStatus.Depleted, Today);
+        var renewal = Queue("renewal", source: 1, paidAt: Now.AddDays(-2));
+        var single = Queue("single", code: "SINGLE");
+        single.Activate(Today);
+        await fixture.Seed(source, renewal, single);
+
+        var result = await fixture.Reconcile();
+
+        Assert.Equal("renewal", result!.TicketId);
+        Assert.Equal("MONTHLY", result.PlanCode);
+        Assert.Equal(Today, result.TicketStartDate);
+        Assert.Equal(Today.AddDays(29), result.TicketExpireDate);
+        Assert.Equal(Now, result.UpdatedAt);
+        Assert.Equal(TicketValidStatus.UnActive, single.ValidStatus);
+        Assert.Equal(3, single.CreditsRemaining);
+        Assert.Equal("renewal", (await fixture.Reconcile())!.TicketId);
+    }
+
+    [Fact]
+    public async Task ExpiryDayActiveTicket_ShouldRemainActive_UntilFollowingDay()
+    {
+        using var fixture = new Fixture();
+        var source = Source("source", TicketValidStatus.Active, Today);
+        var renewal = Queue("renewal", source: 1, paidAt: Now.AddDays(-2));
+        await fixture.Seed(source, renewal);
+
+        Assert.Equal("source", (await fixture.Reconcile())!.TicketId);
+        var next = await fixture.Reconcile(Today.AddDays(1));
+        Assert.Equal("renewal", next!.TicketId);
+        Assert.Equal(Today.AddDays(1), next.TicketStartDate);
+        Assert.Equal(TicketValidStatus.Expire, source.ValidStatus);
     }
 
     private static TicketPlanKind Plan(string code, string? family = null) => new()

@@ -250,17 +250,19 @@ namespace gym_system.Domain.Entities.Tickets
                 paidAt);
         }
 
-        public CurrentTicketSnapshot ToSnapshot(string? ticketId = null)
+        public CurrentTicketSnapshot ToSnapshot(DateTime updatedAt, string? ticketId = null)
         {
             return new CurrentTicketSnapshot
             {
                 TicketId = string.IsNullOrWhiteSpace(ticketId) ? Id : ticketId,
+                PlanCode = Plan.Id,
+                TicketStartDate = ValidStartDate,
                 TicketType = Plan.Type == TicketPlanType.Pack ? "PACK" : "M_PASS",
                 TicketValidState = ValidStatus.ToString(),
                 TicketPaymentState = PaymentState.ToString(),
                 TicketRemainCount = Plan.Type == TicketPlanType.Pack ? CreditsRemaining : null,
                 TicketExpireDate = ValidEndDate,
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = updatedAt
             };
         }
     }
