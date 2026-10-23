@@ -1,5 +1,6 @@
 using gym_system.Application.DevicesUseCase;
 using gym_system.Application.GymAccessUseCase;
+using gym_system.Application.ClassAttendanceProcessing;
 using gym_system.Domain.Entities.Devices;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Enums;
@@ -11,6 +12,70 @@ namespace gym_system.Application.Tests;
 
 public sealed class GatePassageServiceTests
 {
+    [Fact]
+    public async Task StudentPreparationDenialNeverDispatchesDoorCommand()
+    {
+        var f = new Fixture(GateDirection.Entry) { Check = Passed(GymAccessIdentityKind.Student, UserRoleCode.Student) };
+        f.Classes = new(f.Work) { Allowed = false };
+        var result = await f.Execute();
+        Assert.Equal("Denied", result.Outcome);
+        Assert.Equal("TEST_CLASS_DENIED", result.Code);
+        Assert.Equal(0, f.Turnstile.Calls);
+        Assert.Equal(1, f.Classes.Preparations);
+        Assert.Equal("Denied", f.Classes.LastOutcome);
+    }
+
+    [Fact]
+    public async Task PreparedStudentEntryCommitsBeforeDispatchAndReplayDoesNotPrepareOrOpenAgain()
+    {
+        var f = new Fixture(GateDirection.Entry) { Check = Passed(GymAccessIdentityKind.Student, UserRoleCode.Student) };
+        f.Classes = new(f.Work);
+        var id = Guid.NewGuid();
+        Assert.True((await f.Execute(id)).Succeeded);
+        Assert.True((await f.Execute(id)).Replayed);
+        Assert.Equal(1, f.Classes.Preparations);
+        Assert.Equal(1, f.Classes.Completions);
+        Assert.Equal(1, f.Turnstile.Calls);
+        Assert.Equal(1, f.Profiles.Updates);
+        Assert.Equal(2, f.Work.Commits);
+    }
+
+    [Fact]
+    public async Task PreparedStudentCancellationCompletesUnknownWithoutPretendingPresence()
+    {
+        var f = new Fixture(GateDirection.Entry) { Check = Passed(GymAccessIdentityKind.Student, UserRoleCode.Student) };
+        f.Classes = new(f.Work);
+        f.Turnstile.Cancel = true;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => f.Execute());
+        Assert.Equal("Unknown", f.Classes.LastOutcome);
+        Assert.False(f.Records.Current!.AffectsPresence);
+        Assert.Equal(0, f.Profiles.Updates);
+    }
+
+    [Fact]
+    public async Task PreparedStudentMockSuccessPassesSimulationFlagWithoutUpdatingVisit()
+    {
+        var f = new Fixture(GateDirection.Entry) { Check = Passed(GymAccessIdentityKind.Student, UserRoleCode.Student) };
+        f.Classes = new(f.Work);
+        f.Turnstile.Result = TurnstileCommandResult.Accepted(true);
+        Assert.True((await f.Execute()).IsSimulated);
+        Assert.True(f.Classes.LastSimulated);
+        Assert.Equal(0, f.Profiles.Updates);
+        Assert.False(f.Records.Current!.AffectsPresence);
+    }
+
+    [Fact]
+    public async Task ClassCompletionFailureRollsBackResultAndDoesNotRedispatchHardware()
+    {
+        var f = new Fixture(GateDirection.Entry) { Check = Passed(GymAccessIdentityKind.Student, UserRoleCode.Student) };
+        f.Classes = new(f.Work) { FailCompletion = true };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Execute());
+        Assert.Equal(1, f.Turnstile.Calls);
+        Assert.Equal(1, f.Work.Rollbacks);
+        Assert.Equal(1, f.Work.Commits); // Preparation only; actual hardware success cannot be rolled back.
+        Assert.Equal("Requested", f.Records.Current!.Outcome);
+    }
+
     private static readonly DateTime Now = new(2026, 10, 16, 19, 10, 0);
 
     [Fact]
@@ -105,9 +170,11 @@ public sealed class GatePassageServiceTests
         public readonly FakeProfiles Profiles = new();
         public readonly FakeWork Work = new();
         public readonly FakeTurnstile Turnstile = new();
+        public FakeClasses? Classes;
         private readonly GateDeviceAuthorization device;
         public Fixture(GateDirection direction)
         {
+            Turnstile.IsTransactionOpen = () => Work.InTransaction;
             var id = Guid.NewGuid();
             device = new(new(1, direction == GateDirection.Entry ? "ENTRY_MAIN" : "EXIT_MAIN", "gate",
                 direction, true, id), new(id, 1, "Active", Now, null));
@@ -116,7 +183,7 @@ public sealed class GatePassageServiceTests
         {
             var service = new GatePassageService(new FakeEligibility(() => Check), new DeviceRepository(device), Records, Profiles, Work,
                 new FakeClock(), Turnstile, new TurnstileSettings { EntryDoorNo = 1, ExitDoorNo = 2 },
-                new DeviceTestCommandGate(), NullLogger<GatePassageService>.Instance);
+                new DeviceTestCommandGate(), NullLogger<GatePassageService>.Instance, Classes);
             return service.ExecuteAsync(device, id ?? Guid.NewGuid(), "0912345678", default);
         }
     }
@@ -162,11 +229,12 @@ public sealed class GatePassageServiceTests
 
     private sealed class FakeTurnstile : ITurnstileCommandClient
     {
+        public Func<bool> IsTransactionOpen = () => false;
         public int Calls, LastDoor;
         public bool Cancel;
         public TurnstileCommandResult Result = TurnstileCommandResult.Accepted(false);
         public Task<TurnstileCommandResult> OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct)
-        { Calls++; LastDoor = doorNo; if (Cancel) throw new OperationCanceledException(); return Task.FromResult(Result); }
+        { Assert.False(IsTransactionOpen()); Calls++; LastDoor = doorNo; if (Cancel) throw new OperationCanceledException(); return Task.FromResult(Result); }
         public Task<TurnstileCommandResult> QueryStatusAsync(int controllerSN, CancellationToken ct) => throw new NotSupportedException();
     }
 
@@ -184,9 +252,34 @@ public sealed class GatePassageServiceTests
     private sealed class FakeWork : IUnitOfWork
     {
         public int Commits, Rollbacks;
-        public Task BeginAsync(CancellationToken ct) => Task.CompletedTask;
-        public Task CommitAsync(CancellationToken ct) { Commits++; return Task.CompletedTask; }
-        public Task RollbackAsync(CancellationToken ct) { Rollbacks++; return Task.CompletedTask; }
+        public bool InTransaction;
+        public Task BeginAsync(CancellationToken ct) { Assert.False(InTransaction); InTransaction = true; return Task.CompletedTask; }
+        public Task CommitAsync(CancellationToken ct) { InTransaction = false; Commits++; return Task.CompletedTask; }
+        public Task RollbackAsync(CancellationToken ct) { InTransaction = false; Rollbacks++; return Task.CompletedTask; }
+    }
+
+    private sealed class FakeClasses(FakeWork work) : IClassAdmissionService
+    {
+        public bool Allowed = true, FailCompletion, LastSimulated;
+        public int Preparations, Completions;
+        public string? LastOutcome;
+        public Task LockAsync(CancellationToken ct) { Assert.True(work.InTransaction); return Task.CompletedTask; }
+        public Task<ClassPreparation> PrepareEntryAsync(Guid id, string user, CancellationToken ct)
+        {
+            Assert.True(work.InTransaction);
+            Preparations++;
+            return Task.FromResult(new ClassPreparation(Allowed, Allowed ? "TEST_READY" : "TEST_CLASS_DENIED", "Test preparation."));
+        }
+        public Task<ClassCompletion> CompleteAsync(Guid id, string user, GateDirection direction,
+            string outcome, bool simulated, DateTime respondedAt, CancellationToken ct)
+        {
+            Assert.True(work.InTransaction);
+            Completions++;
+            LastOutcome = outcome;
+            LastSimulated = simulated;
+            if (FailCompletion) throw new InvalidOperationException("Test completion failure.");
+            return Task.FromResult(new ClassCompletion());
+        }
     }
 
     private sealed class FakeClock : IClock

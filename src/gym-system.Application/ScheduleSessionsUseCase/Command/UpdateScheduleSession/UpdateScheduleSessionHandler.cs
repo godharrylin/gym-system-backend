@@ -6,6 +6,7 @@ using gym_system.Domain.Entities.ScheduleSessions;
 using gym_system.Domain.Repositories;
 using System.Globalization;
 using gym_system.Domain.Enums;
+using gym_system.Application.ClassAttendanceProcessing;
 
 namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleSession
 {
@@ -19,6 +20,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
         private readonly IScheduleSessionLogRepository _scheduleSessionLogRepository;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IClock _clock;
+        private readonly IScheduleAttendanceSynchronizer _attendanceSynchronizer;
 
         public UpdateScheduleSessionHandler(
             IScheduleSessionRepository scheduleSessionRepository,
@@ -28,7 +30,8 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
             IUserRepository userRepository,
             IUserRoleRepository roleRepository,
             IUserPermissionService userPermissionService,
-            IScheduleSessionLogRepository scheduleSessionLogRepository)
+            IScheduleSessionLogRepository scheduleSessionLogRepository,
+            IScheduleAttendanceSynchronizer attendanceSynchronizer)
         {
             _scheduleSessionRepository = scheduleSessionRepository;
             _courseRepository = courseRepository;
@@ -38,6 +41,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
             _roleRepository = roleRepository;
             _userPermissionService = userPermissionService;
             _scheduleSessionLogRepository = scheduleSessionLogRepository;
+            _attendanceSynchronizer = attendanceSynchronizer;
         }
 
         /// <summary>
@@ -52,17 +56,23 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
         {
             if (string.IsNullOrWhiteSpace(cmd.SessionId))
                 throw new ArgumentException("排課 ID 不可為空");
+            var operatorId = cmd.OperatorId?.Trim();
+            ArgumentException.ThrowIfNullOrWhiteSpace(operatorId);
 
             await _userPermissionService.EnsureHasAnyRoleAsync(
-                cmd.OperatorId,
+                operatorId,
                 [UserRoleCode.Admin, UserRoleCode.Staff],
                 ct);
 
             await _unitOfWork.BeginAsync(ct);
             try
             {
+                await _scheduleSessionRepository.AcquireSessionMutationLockAsync(cmd.SessionId.Trim(), ct);
                 var session = await _scheduleSessionRepository.GetByIdAsync(cmd.SessionId.Trim(), ct)
                     ?? throw new InvalidOperationException("找不到排課資料");
+
+                session.EnsureEditable(_clock.Now());
+
                 var before = ScheduleSessionSnapshot.From(session);
 
                 var requestedClassId = NormalizeOptional(cmd.ClassId);
@@ -70,19 +80,19 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
                     requestedClassId is not null &&
                     requestedClassId != session.ClassId;
 
-                Course? newCourse = null;
-                if (classChanged)
-                {
-                    newCourse = await _courseRepository.GetByIdAsync(requestedClassId!, ct)
-                        ?? throw new InvalidOperationException("選擇的課程不存在");
-
-                    if (!newCourse.IsActive)
-                        throw new InvalidOperationException("選擇的課程已下架");
-                }
+                var effectiveClassId = requestedClassId ?? session.ClassId;
+                var currentCourse = await _courseRepository.GetByIdAsync(effectiveClassId, ct)
+                    ?? throw new InvalidOperationException("選擇的課程不存在");
+                if (!currentCourse.IsActive)
+                    throw new InvalidOperationException("選擇的課程已下架");
+                Course? newCourse = classChanged ? currentCourse : null;
 
                 var date = ParseDateOrDefault(cmd.Date, session.Date);
                 var startTime = ParseTimeOrDefault(cmd.StartTime, TimeOnly.FromDateTime(session.StartAt));
                 var startAt = date.ToDateTime(startTime);
+
+                foreach (var weekStart in new[] { MondayOf(session.Date), MondayOf(date) }.Distinct().Order())
+                    await _scheduleSessionRepository.AcquireWeekGenerationLockAsync(weekStart, ct);
 
                 var duration = newCourse is null
                     ? session.EndAt - session.StartAt
@@ -92,23 +102,19 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
                 var instructorId = session.InstructorId;
                 var instructorName = session.InstructorName;
                 var requestedInstructorId = NormalizeOptional(cmd.InstructorId);
+                var effectiveInstructorId = requestedInstructorId ?? session.InstructorId;
+                var instructor = await _userRepository.FindUserByIdAsync(effectiveInstructorId, ct);
+                if (instructor is null || !instructor.IsActive)
+                    throw new InvalidOperationException("選擇的老師不存在或已停用");
+
+                var instructorRole = await _roleRepository.GetUserRoleAsync(
+                    effectiveInstructorId, UserRoleCode.Instructor, ct);
+                if (instructorRole is null || !instructorRole.IsActive)
+                    throw new InvalidOperationException("選擇的使用者目前不是有效老師");
 
                 if (requestedInstructorId is not null &&
                     requestedInstructorId != session.InstructorId)
                 {
-                    var instructor = await _userRepository.FindUserByIdAsync(requestedInstructorId, ct);
-
-                    if (instructor is null || !instructor.IsActive)
-                        throw new InvalidOperationException("選擇的老師不存在或已停用");
-
-                    var role = await _roleRepository.GetUserRoleAsync(
-                        requestedInstructorId,
-                        UserRoleCode.Instructor,
-                        ct);
-
-                    if (role is null || !role.IsActive)
-                        throw new InvalidOperationException("選擇的使用者目前不是有效老師");
-
                     instructorId = instructor.Id;
                     instructorName = instructor.Name;
                 }
@@ -149,10 +155,12 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
                     return false;
                 }
 
+                await _attendanceSynchronizer.SynchronizeAsync(session, session.UpdateTime!.Value, operatorId, ct);
+
                 var log = ScheduleSessionLog.Create(
                     arrangeSn: session.ArrangeSn,
                     changedData: changedData,
-                    operatorId: cmd.OperatorId,
+                    operatorId: operatorId,
                     remark: cmd.Remark);
 
                 await _scheduleSessionLogRepository.AddAsync(log, ct);
@@ -223,6 +231,12 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.UpdateScheduleS
                 throw new ArgumentException("更新欄位不可為空字串");
 
             return value.Trim();
+        }
+
+        private static DateOnly MondayOf(DateOnly date)
+        {
+            var daysSinceMonday = ((int)date.DayOfWeek + 6) % 7;
+            return date.AddDays(-daysSinceMonday);
         }
 
     }

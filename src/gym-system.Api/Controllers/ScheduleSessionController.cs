@@ -13,6 +13,7 @@ using System.Globalization;
 namespace gym_system.Api.Controllers
 {
     [ApiController]
+    [Authorize(Roles = "Admin")]
     [Route("api/v1/admin/schedule-session")]
     public sealed class ScheduleSessionController : ControllerBase
     {
@@ -43,7 +44,18 @@ namespace gym_system.Api.Controllers
                 Date = req?.date ?? "",
                 StartTime = req?.startTime ?? ""
             };
-            return Ok(await _createScheduleSessionHandler.Handle(command, ct));
+            try
+            {
+                return Ok(await _createScheduleSessionHandler.Handle(command, ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { code = "INVALID_SCHEDULE_SESSION", message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { code = "SCHEDULE_SESSION_REJECTED", message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -54,7 +66,6 @@ namespace gym_system.Api.Controllers
         /// <param name="ct"></param>
         /// <returns></returns>
         [HttpPost("{id}")]
-        [Authorize]
         public async Task<ActionResult<bool>> UpdateScheduleAsync([FromRoute] string id, [FromBody] ScheduleSessionRequest req, CancellationToken ct)
         {
             var operatorId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
@@ -84,6 +95,14 @@ namespace gym_system.Api.Controllers
             {
                 return Forbid();
             }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { code = "INVALID_SCHEDULE_SESSION", message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { code = "SCHEDULE_SESSION_REJECTED", message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -98,14 +117,31 @@ namespace gym_system.Api.Controllers
             [FromBody] ScheduleSessionRequest? req,
             CancellationToken ct)
         {
+            var operatorId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+            if (string.IsNullOrWhiteSpace(operatorId))
+            {
+                return Unauthorized(new { message = "Token 缺少使用者識別" });
+            }
+
             var cmd = new CancelScheduleSessionCommand
             {
                 ArrangeId = arrangeId,
-                OperatorId = req?.operatorId?.Trim(),
+                OperatorId = operatorId.Trim(),
                 Remark = req?.remark?.Trim()
             };
 
-            return Ok(await _cancelScheduleSessionHandler.Handle(cmd, ct));
+            try
+            {
+                return Ok(await _cancelScheduleSessionHandler.Handle(cmd, ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { code = "INVALID_SCHEDULE_SESSION", message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { code = "SCHEDULE_SESSION_REJECTED", message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -125,41 +161,42 @@ namespace gym_system.Api.Controllers
                 return BadRequest(new { message = "weekStart 格式錯誤，請使用 yyyy-MM-dd" });
             }
 
-            var result = await _getOrEnsureScheduleWeekHandler.Handle(
-                new GetOrEnsureScheduleWeekCommand
-                {
-                    WeekStart = parsedWeekStart
-                },
-                ct);
-            var notCancelSession = result.Sessions.ToList().Where(session => session.Status != "Cancel");
-
-            return Ok(new GetScheduleWeekResponse
+            try
             {
-                WeekStart = result.WeekStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                WeekEnd = result.WeekEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                Source = result.Source,
-                Created = result.Created,
-                Sessions = result.Sessions.Select(session => new ScheduleSessionDto
+                var result = await _getOrEnsureScheduleWeekHandler.Handle(
+                    new GetOrEnsureScheduleWeekCommand { WeekStart = parsedWeekStart }, ct);
+                return Ok(new GetScheduleWeekResponse
                 {
-                    SessionId = string.IsNullOrWhiteSpace(session.ArrangeId)
-                        ? session.ArrangeSn.ToString(CultureInfo.InvariantCulture)
-                        : session.ArrangeId,
-                    ScheduleId = session.RuleSn,
-                    Date = session.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                    DayOfWeek = (int)session.DayOfWeek,
-                    StartTime = session.StartTime,
-                    EndTime = session.EndTime,
-                    ClassDefId = session.ClassDefId,
-                    ClassName = session.ClassName,
-                    InstructorId = session.InstructorId,
-                    InstructorName = session.InstructorName,
-                    Duration = session.Duration,
-                    Color = session.Color,
-                    IsFree = session.IsFree,
-                    Status = session.Status,
-                    Source = session.Source
-                }).ToList()
-            });
+                    WeekStart = result.WeekStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    WeekEnd = result.WeekEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    Source = result.Source,
+                    Created = result.Created,
+                    Sessions = result.Sessions.Select(session => new ScheduleSessionDto
+                    {
+                        SessionId = string.IsNullOrWhiteSpace(session.ArrangeId)
+                            ? session.ArrangeSn.ToString(CultureInfo.InvariantCulture)
+                            : session.ArrangeId,
+                        ScheduleId = session.RuleSn,
+                        Date = session.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        DayOfWeek = (int)session.DayOfWeek,
+                        StartTime = session.StartTime,
+                        EndTime = session.EndTime,
+                        ClassDefId = session.ClassDefId,
+                        ClassName = session.ClassName,
+                        InstructorId = session.InstructorId,
+                        InstructorName = session.InstructorName,
+                        Duration = session.Duration,
+                        Color = session.Color,
+                        IsFree = session.IsFree,
+                        Status = session.Status,
+                        Source = session.Source
+                    }).ToList()
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { code = "SCHEDULE_TEMPLATE_CONFLICT", message = ex.Message });
+            }
         }
 
         

@@ -20,7 +20,9 @@ namespace gym_system.Infrastructures.Queries.Courses
             sql.Append("""
                 SELECT
                     c.class_sn,
+                    c.class_id,
                     c.class_name,
+                    COALESCE(c.class_default_instructor_id, '') AS class_default_instructor_id,
                     COALESCE(u.usr_name, c.class_default_instructor_name, '') AS usr_name,
                     c.class_label_color,
                     c.class_duration,

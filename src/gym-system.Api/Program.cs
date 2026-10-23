@@ -97,6 +97,11 @@ builder.Services.AddCors(options =>
 });
 /* SQL Connection */
 builder.Services.AddInfrastructureSql();
+var classProcessingSettings = builder.Configuration.GetSection("ClassProcessing")
+    .Get<gym_system.Application.ClassAttendanceProcessing.ClassProcessingSettings>() ?? new();
+classProcessingSettings.Validate();
+builder.Services.AddSingleton(classProcessingSettings);
+builder.Services.AddHostedService<gym_system.Api.ClassAttendanceProcessing.ClassProcessingBackgroundService>();
 builder.Services.AddScoped<IAuthTokenGenerator, JwtAuthTokenGenerator>();
 builder.Services.AddScoped<IRefreshTokenValidator, JwtRefreshTokenValidator>();
 builder.Services.AddScoped<IUserPermissionService, UserPermissionService>();

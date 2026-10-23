@@ -18,7 +18,9 @@ namespace gym_system.Api.Tests
                     new CourseResult
                     {
                         class_sn = 1,
+                        class_id = "CLS000001",
                         class_name = "瑜珈入門",
+                        class_default_instructor_id = "U0000000001",
                         usr_name = "Amy",
                         class_label_color = "#FF5733",
                         class_duration = 60,
@@ -36,8 +38,9 @@ namespace gym_system.Api.Tests
             var response = Assert.IsType<GetCourseResponse>(ok.Value);
             var item = Assert.Single(response.CoursesInfoList!);
 
-            Assert.Equal("1", item.Id);
+            Assert.Equal("CLS000001", item.Id);
             Assert.Equal("瑜珈入門", item.Name);
+            Assert.Equal("U0000000001", item.InstructorId);
             Assert.Equal("Amy", item.Instructor);
             Assert.Equal("#FF5733", item.Color);
             Assert.Equal("60", item.Duration);

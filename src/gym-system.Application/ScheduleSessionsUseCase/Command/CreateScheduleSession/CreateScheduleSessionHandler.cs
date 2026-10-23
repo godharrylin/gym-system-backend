@@ -1,6 +1,7 @@
 ﻿using gym_system.Domain.Entities.ScheduleSessions;
 using gym_system.Domain.Repositories;
 using System.Globalization;
+using gym_system.Domain.Enums;
 
 namespace gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleSession
 {
@@ -9,14 +10,20 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleS
         private readonly IUnitOfWork _unitOfWork;
         private readonly IScheduleSessionRepository _scheduleSessionRepository;
         private readonly ICourseRepository _courseRepository;
+        private readonly IUserRepository _userRepository;
+        private readonly IUserRoleRepository _roleRepository;
 
         public CreateScheduleSessionHandler(IUnitOfWork unitOfWork, 
                                             IScheduleSessionRepository scheduleSessionRepository,
-                                            ICourseRepository courseRepository) 
+                                            ICourseRepository courseRepository,
+                                            IUserRepository userRepository,
+                                            IUserRoleRepository roleRepository)
         {
             _unitOfWork = unitOfWork;
             _scheduleSessionRepository = scheduleSessionRepository;
             _courseRepository = courseRepository;
+            _userRepository = userRepository;
+            _roleRepository = roleRepository;
         }
 
         public async Task<bool> Handle( CreateScheduleSessionCommand cmd, CancellationToken ct)
@@ -36,7 +43,17 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleS
                 if (course == null || course.IsActive == false)
                     throw new InvalidOperationException($"輸入的Class Id: {cmd.ClassId} 不存在或已停用");
 
+                var instructor = await _userRepository.FindUserByIdAsync(course.DefaultInstructorId, ct);
+                if (instructor is null || !instructor.IsActive)
+                    throw new InvalidOperationException("課程預設老師不存在或已停用");
+
+                var instructorRole = await _roleRepository.GetUserRoleAsync(
+                    course.DefaultInstructorId, UserRoleCode.Instructor, ct);
+                if (instructorRole is null || !instructorRole.IsActive)
+                    throw new InvalidOperationException("課程預設老師目前不是有效老師");
+
                 var date = ParseToDateOnly(cmd.Date);
+                await _scheduleSessionRepository.AcquireWeekGenerationLockAsync(MondayOf(date), ct);
                 var st = ParseToTimeOnly(cmd.StartTime);
                 var startAt = date.ToDateTime(st);
                 var newSession = ScheduleSession.Create(
@@ -45,7 +62,7 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleS
                     className: course.Name,
                     classLabelColor: course.LabelColor,
                     instructorId: course.DefaultInstructorId,
-                    instructorName: course.DefaultInstructorName,
+                    instructorName: instructor.Name,
                     startAt: startAt,
                     endAt: startAt.AddMinutes(course.Duration),
                     isFree: cmd.IsFree ?? course.IsFree);
@@ -101,6 +118,12 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.CreateScheduleS
             }
 
             return result;
+        }
+
+        private static DateOnly MondayOf(DateOnly date)
+        {
+            var daysSinceMonday = ((int)date.DayOfWeek + 6) % 7;
+            return date.AddDays(-daysSinceMonday);
         }
 
     }

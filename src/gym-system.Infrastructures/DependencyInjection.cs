@@ -47,6 +47,23 @@ namespace gym_system.Infrastructures
         //  MS SQL
         public static IServiceCollection AddInfrastructureSql(this IServiceCollection services)
         {
+            services.AddSingleton(new gym_system.Application.ClassAttendanceProcessing.ClassProcessingSettings());
+            services.AddScoped<gym_system.Domain.ClassAttendanceProcessing.IClassProcessingRepository,
+                ClassAttendanceProcessing.SqlClassProcessingRepository>();
+            services.AddScoped<gym_system.Application.ClassAttendanceProcessing.AttendanceConfirmationService>();
+            services.AddScoped<gym_system.Application.ClassAttendanceProcessing.ClassProcessingCoordinator>();
+            services.AddSingleton<gym_system.Application.ClassAttendanceProcessing.IClassProcessingErrorPolicy,
+                ClassAttendanceProcessing.SqlClassProcessingErrorPolicy>();
+            services.AddScoped<ClassAttendanceProcessing.ClassProcessingWorker>();
+            services.AddScoped<gym_system.Domain.ClassAttendanceProcessing.IClassAttendanceRepository,
+                ClassAttendanceProcessing.SqlClassAttendanceRepository>();
+            services.AddScoped<gym_system.Application.ClassAttendanceProcessing.IClassAdmissionService,
+                gym_system.Application.ClassAttendanceProcessing.ClassAdmissionService>();
+            services.AddScoped<gym_system.Application.ClassAttendanceProcessing.IScheduleAttendanceSynchronizer,
+                ClassAttendanceProcessing.SqlScheduleAttendanceSynchronizer>();
+            services.AddScoped<gym_system.Domain.ClassAttendanceProcessing.ICreditReservationRepository,
+                ClassAttendanceProcessing.SqlCreditReservationRepository>();
+            services.AddScoped<gym_system.Application.ClassAttendanceProcessing.CreditReservationService>();
             services.AddScoped<IGateDeviceRepository, Devices.SqlGateDeviceRepository>();
             services.AddScoped<IGatePassageRepository, Devices.SqlGatePassageRepository>();
             services.AddScoped<gym_system.Application.MembersUseCase.Queries.GetStudentMemberList.IStudentMemberListQueryService,

@@ -2,10 +2,12 @@ using gym_system.Api.Contracts.Courses;
 using gym_system.Application.CoursesUseCase.Queries;
 using gym_system.Application.CoursesUseCase.Commands;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace gym_system.Api.Controllers
 {
     [ApiController]
+    [Authorize(Roles = "Admin")]
     [Route("api/v1/classes")]
     public class CourseController : ControllerBase
     {
@@ -37,8 +39,9 @@ namespace gym_system.Api.Controllers
             {
                 CoursesInfoList = result.Select(x => new CourseDto
                 {
-                    Id = x.class_sn.ToString(),
+                    Id = x.class_id,
                     Name = x.class_name,
+                    InstructorId = x.class_default_instructor_id,
                     Instructor = x.usr_name,
                     Color = x.class_label_color,
                     Duration = x.class_duration.ToString(),
