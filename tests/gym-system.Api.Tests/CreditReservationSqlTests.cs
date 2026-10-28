@@ -1,5 +1,9 @@
 using Dapper;
 using gym_system.Application.ClassAttendanceProcessing;
+using gym_system.Application.GymAccessUseCase;
+using gym_system.Application.DevicesUseCase;
+using gym_system.Application.TicketsUseCase.Queries;
+using gym_system.Application.TicketsUseCase.Services;
 using gym_system.Domain.ClassAttendanceProcessing;
 using gym_system.Domain.Entities.Devices;
 using gym_system.Domain.Repositories;
@@ -13,6 +17,365 @@ namespace gym_system.Api.Tests;
 [Collection("Ticket SQL")]
 public sealed class CreditReservationSqlTests
 {
+    [SqlServerFact]
+    public async Task SettlementFailureOfOneStudentDoesNotPreventAnotherFromCompleting()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        var broken = await f.AddBrokenAttendanceCandidate();
+        await f.FixAttendance();
+        await f.AdvanceToSettlement(1);
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal("Completed", await f.SettlementState());
+        Assert.Equal(1, await f.UsageCount());
+        using var c = f.Tickets.Open();
+        Assert.Equal("NeedsReview", await c.ExecuteScalarAsync<string>("""
+            SELECT i.processing_state FROM dbo.class_processing_item i
+            INNER JOIN dbo.class_processing_job j ON j.job_sn=i.job_sn
+            WHERE j.cls_scdle_arnge_sn=@session AND j.phase='B' AND i.user_id=@broken;
+            """, new { session = f.Contexts[0].Session, broken }));
+        Assert.Equal(0, await f.RunCoordinator());
+        Assert.Equal(1, await f.UsageCount());
+    }
+
+    [SqlServerFact]
+    public async Task SettlementReclaimsExpiredLeaseAndPreservesPreviouslyStartedAttempt()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        await f.AdvanceToSettlement(1);
+        using var c = f.Tickets.Open();
+        var job = await c.ExecuteScalarAsync<long>("SELECT job_sn FROM dbo.class_processing_job WHERE cls_scdle_arnge_sn=@session AND phase='B'",
+            new { session = f.Contexts[0].Session });
+        await f.Tickets.Transaction(async sp =>
+        {
+            await sp.GetRequiredService<IClassAttendanceRepository>().LockCalendarAsync(default);
+            var work = sp.GetRequiredService<IClassProcessingRepository>();
+            Assert.NotNull(await work.TryLeaseAsync(job, Guid.NewGuid(), f.Tickets.Marker, f.Now, default));
+            var item = Assert.Single(await work.EnsureItemsAsync(job, new[] { f.Student }, f.Now, default));
+            Assert.NotNull(await work.BeginItemAsync(item, f.Now, default));
+            return true;
+        });
+        Assert.Equal(("Running", 1), await f.SettlementAttempts());
+        f.Tickets.Clock.Value = f.Now.AddMinutes(2);
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal(("Completed", 2), await f.SettlementAttempts());
+        Assert.Equal(1, await f.UsageCount());
+    }
+
+    [SqlServerFact]
+    public async Task OneTickSettlesPreviousClassBeforeNextAttendanceAndActivatesSuccessorWithoutNewEntry()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        var nextPlan = await f.Tickets.AddPlan(type: "M_PASS");
+        var nextPass = await f.Tickets.SeedPass(f.Student, nextPlan, paidAt: f.Now);
+        var end = await f.AdvanceToSettlement();
+        var next = await f.AddContext(end.AddMinutes(10));
+        f.Tickets.Clock.Value = end.AddMinutes(20).AddMilliseconds(1);
+        Assert.Equal(2, await f.RunCoordinator());
+        Assert.Equal("Completed", await f.SettlementState());
+        Assert.Equal("Depleted", (await f.Tickets.Pass(f.Pass.Sn)).Status);
+        Assert.Equal("Active", (await f.Tickets.Pass(nextPass.Sn)).Status);
+        var attendance = await f.Tickets.Transaction(sp => sp.GetRequiredService<IClassAttendanceRepository>()
+            .FindAttendanceAsync(next.Attendance, default));
+        Assert.Equal("Eligible", attendance!.Eligibility);
+        Assert.Equal(nextPass.Id, attendance.PassId);
+        Assert.Equal(1, await f.UsageCount());
+    }
+
+    [SqlServerFact]
+    public async Task SameDayLateAAndBReconstructAttendanceBeforeSettling()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.AddGateEvent(1, f.Now);
+        await f.AdvanceToSettlement(1);
+        Assert.Equal(2, await f.RunCoordinator());
+        Assert.Equal("Completed", await f.SettlementState());
+        Assert.Equal(CreditReservationState.Consumed, Assert.Single(await f.Holds()).State);
+        Assert.Equal(1, await f.UsageCount());
+    }
+
+    [SqlServerFact]
+    public async Task UnknownUsageRelationshipStopsSettlementWithoutAnotherDebit()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        await f.AdvanceToSettlement(1);
+        using var c = f.Tickets.Open();
+        await c.ExecuteAsync("""
+            INSERT dbo.sdt_ticket_usage_log (pass_id,attendance_sn,usage_action,usage_type,
+                deducted_credits,credits_before_snapshot,rem_credits_snapshot,usage_dt,recorded_at)
+            SELECT @pass,@attendance,'Consume','Manual',1,1,0,cls_scdle_arnge_et,@now
+            FROM dbo.cls_scdle_arnge WHERE cls_scdle_arnge_sn=@session;
+            """, new { pass = f.Pass.Id, attendance = f.Contexts[0].Attendance, session = f.Contexts[0].Session, now = f.Now });
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal("NeedsReview", await f.SettlementState());
+        Assert.Equal(1, await f.UsageCount());
+        Assert.Equal(1, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+        Assert.Equal(CreditReservationState.NeedsReview, Assert.Single(await f.Holds()).State);
+    }
+
+    [SqlServerFact]
+    public async Task SettlementTransientFailureRollsBackAndRetriesAtMostThreeTimesFifteenSecondsApart()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        await f.AdvanceToSettlement(1);
+        Assert.Equal(1, await f.RunCoordinator(failAfterDebit: true));
+        Assert.Equal(("Failed", 1), await f.SettlementAttempts());
+        Assert.Equal(0, await f.UsageCount());
+        Assert.Equal(1, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+        f.Tickets.Clock.Value = f.Now.AddSeconds(14);
+        Assert.Equal(0, await f.RunCoordinator(failAfterDebit: true));
+        f.Tickets.Clock.Value = f.Now.AddSeconds(1);
+        Assert.Equal(1, await f.RunCoordinator(failAfterDebit: true));
+        Assert.Equal(("Failed", 2), await f.SettlementAttempts());
+        f.Tickets.Clock.Value = f.Now.AddSeconds(15);
+        Assert.Equal(1, await f.RunCoordinator(failAfterDebit: true));
+        Assert.Equal(("NeedsReview", 3), await f.SettlementAttempts());
+        f.Tickets.Clock.Value = f.Now.AddSeconds(15);
+        Assert.Equal(0, await f.RunCoordinator(failAfterDebit: true));
+        Assert.Equal(0, await f.UsageCount());
+        Assert.Equal(1, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+        Assert.True(Assert.Single(await f.Holds()).HoldsCredit);
+    }
+
+    [SqlServerFact]
+    public async Task ConcurrentSettlementOfOneAttendanceDebitsOnlyOnce()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        await f.AdvanceToSettlement(1);
+        var results = await Task.WhenAll(
+            f.Tickets.Transaction(sp => f.SettleIn(sp, "Manual")),
+            f.Tickets.Transaction(sp => f.SettleIn(sp)));
+        Assert.All(results, result => Assert.Equal("Completed", result.State));
+        Assert.Single(results.Where(x => x.Code == "CLASS_SETTLED"));
+        Assert.Single(results.Where(x => x.Code == "SETTLEMENT_ALREADY_CONSUMED"));
+        Assert.Equal(1, await f.UsageCount());
+        Assert.Equal(0, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+    }
+
+    [SqlServerFact]
+    public async Task SettlementHonorsStrictBoundaryDebitsOnceAndDoesNotActivateSuccessor()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        var nextPlan = await f.Tickets.AddPlan();
+        var next = await f.Tickets.SeedPass(f.Student, nextPlan, paidAt: f.Now.AddMinutes(-30));
+        var end = await f.AdvanceToSettlement();
+        Assert.Equal(0, await f.RunCoordinator()); // Exact end + 10 is still within return window.
+        f.Tickets.Clock.Value = f.Now.AddMilliseconds(1);
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal(0, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+        Assert.Equal("Depleted", (await f.Tickets.Pass(f.Pass.Sn)).Status);
+        Assert.Equal(end, (await f.Tickets.Pass(f.Pass.Sn)).EndedAt);
+        Assert.Equal("UnActive", (await f.Tickets.Pass(next.Sn)).Status);
+        var hold = Assert.Single(await f.Holds());
+        Assert.Equal(CreditReservationState.Consumed, hold.State);
+        using var c = f.Tickets.Open();
+        var usage = await c.QuerySingleAsync<ClassTicketUsage>("""
+            SELECT usage_sn AS UsageSn,pass_id AS PassId,attendance_sn AS AttendanceSn,usage_action AS Action,
+                usage_type AS Source,deducted_credits AS Credits,credits_before_snapshot AS [Before],
+                rem_credits_snapshot AS [After],usage_dt AS BusinessAt,recorded_at AS RecordedAt,
+                reversed_usage_sn AS ReversedUsageSn
+            FROM dbo.sdt_ticket_usage_log WHERE attendance_sn=@attendance;
+            """, new { attendance = f.Contexts[0].Attendance });
+        Assert.Equal(hold.UsageSn, usage.UsageSn);
+        Assert.Equal(("Consume", "Auto_Settlement", 1, 1, 0),
+            (usage.Action, usage.Source, usage.Credits, usage.Before, usage.After));
+        Assert.Equal(end, usage.BusinessAt);
+        Assert.NotNull(usage.RecordedAt);
+        Assert.Equal(0, await f.RunCoordinator());
+        Assert.Equal(1, await f.UsageCount());
+    }
+
+    [SqlServerFact]
+    public async Task SettlementMonthlyCompletesWithoutUsageOrCreditHold()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission("M_PASS");
+        await f.FixAttendance();
+        await f.AdvanceToSettlement(1);
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal(0, await f.UsageCount());
+        Assert.Empty(await f.Holds());
+        Assert.Equal("Completed", await f.SettlementState());
+    }
+
+    [SqlServerFact]
+    public async Task SettlementRollsBackDebitUsageAndConsumptionWithCallerTransaction()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        await f.AdvanceToSettlement(1);
+        await Assert.ThrowsAsync<ForcedRollback>(() => f.Tickets.Transaction<bool>(async sp =>
+        {
+            Assert.Equal("Completed", (await f.SettleIn(sp)).State);
+            throw new ForcedRollback();
+        }));
+        Assert.Equal(1, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+        Assert.Equal(CreditReservationState.Fixed, Assert.Single(await f.Holds()).State);
+        Assert.Equal(0, await f.UsageCount());
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal(1, await f.UsageCount());
+    }
+
+    [SqlServerFact]
+    public async Task ManualAndAutomaticSettlementShareTheSameAttendanceDeduplication()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        await f.AdvanceToSettlement(1);
+        await f.Tickets.Transaction(async sp =>
+        {
+            Assert.Equal("CLASS_SETTLED", (await f.SettleIn(sp, "Manual")).Code);
+            // The manual application flow must complete its B item in this transaction too.
+            return true;
+        });
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal(1, await f.UsageCount());
+        Assert.Equal(0, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+        Assert.Equal("Completed", await f.SettlementState());
+    }
+
+    [SqlServerFact]
+    public async Task FixedBalanceConflictRetainsHoldAndDoesNotDebitNegative()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        using var c = f.Tickets.Open();
+        await c.ExecuteAsync("UPDATE dbo.sdt_ticket_pass SET credits_remaining=0 WHERE pass_sn=@pass AND owner_id=@Student",
+            new { pass = f.Pass.Sn, f.Student });
+        await f.AdvanceToSettlement(1);
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal("NeedsReview", await f.SettlementState());
+        Assert.Equal(CreditReservationState.NeedsReview, Assert.Single(await f.Holds()).State);
+        Assert.Equal(0, await f.UsageCount());
+        Assert.Equal(0, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+    }
+
+    [SqlServerFact]
+    public async Task FixedAttendanceUnfinishedAcrossDateGoesToReviewWithoutDebit()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission();
+        await f.FixAttendance();
+        f.Tickets.Clock.Value = f.Now.Date.AddDays(1).AddHours(1);
+        Assert.Equal(1, await f.RunCoordinator());
+        Assert.Equal("NeedsReview", await f.SettlementState());
+        Assert.Equal(1, (await f.Tickets.Pass(f.Pass.Sn)).Remaining);
+        Assert.Equal(0, await f.UsageCount());
+        Assert.True(Assert.Single(await f.Holds()).HoldsCredit);
+    }
+
+    [SqlServerFact]
+    public async Task SettlementRunningIsPerStudentAndDoesNotSendHardware()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission("M_PASS");
+        var previous = await f.AddContext(f.Now.AddHours(-2));
+        using var c = f.Tickets.Open();
+        await c.ExecuteAsync("""
+            INSERT dbo.class_processing_job (cls_scdle_arnge_sn,phase,processing_state,class_start_at,
+                class_end_at,instructor_id,scheduled_at,created_at,updated_at,lease_token,lease_owner,lease_expires_at)
+            SELECT @session,'B','Running',cls_scdle_arnge_st,cls_scdle_arnge_et,@Student,
+                DATEADD(MINUTE,10,cls_scdle_arnge_et),@now,@now,NEWID(),@Marker,DATEADD(MINUTE,2,@now)
+            FROM dbo.cls_scdle_arnge WHERE cls_scdle_arnge_sn=@session;
+            INSERT dbo.class_processing_item (job_sn,user_id,attendance_sn,processing_state,created_at,updated_at)
+            SELECT job_sn,@Student,@attendance,'Running',@now,@now FROM dbo.class_processing_job WHERE cls_scdle_arnge_sn=@session AND phase='B';
+            """, new { session = previous.Session, f.Student, attendance = previous.Attendance, now = f.Now, f.Tickets.Marker });
+        var result = await f.ExecuteGate();
+        Assert.Equal("Denied", result.Outcome);
+        Assert.Equal("PREVIOUS_SETTLEMENT_PROCESSING", result.Code);
+    }
+
+    [SqlServerFact]
+    public async Task ActualGatePipelineDoesNotActivateQueuedTicketBeforePreviousSettlement()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission("M_PASS");
+        var next = await f.SeedExpiredTicketWithQueuedSuccessor(previousAttendance: true);
+        var result = await f.ExecuteGate();
+        Assert.Equal("Denied", result.Outcome);
+        Assert.Equal("PREVIOUS_SETTLEMENT_PENDING", result.Code);
+        Assert.Equal("Active", (await f.Tickets.Pass(f.Pass.Sn)).Status);
+        Assert.Equal("UnActive", (await f.Tickets.Pass(next.Sn)).Status);
+        Assert.Equal(0, await f.HoldCount());
+    }
+
+    [SqlServerFact]
+    public async Task NextAttendanceWaitsForPreviousSettlementWithoutActivatingQueuedTicket()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission("M_PASS");
+        var next = await f.SeedExpiredTicketWithQueuedSuccessor(previousAttendance: true);
+        await f.AddGateEvent(1, f.Now);
+        f.Tickets.Clock.Value = f.Now.AddMinutes(6);
+        var result = await f.Confirm();
+        Assert.Equal("Blocked", result.State);
+        Assert.Equal("PREVIOUS_SETTLEMENT_PENDING", result.Code);
+        Assert.NotNull(result.BlockedBy);
+        Assert.Equal("Active", (await f.Tickets.Pass(f.Pass.Sn)).Status);
+        Assert.Equal("UnActive", (await f.Tickets.Pass(next.Sn)).Status);
+    }
+
+    [SqlServerFact]
+    public async Task NextAttendanceCanActivateQueuedTicketWithoutNewEntryRequest()
+    {
+        await using var f = new Fixture();
+        await f.InitializeAdmission("M_PASS");
+        var next = await f.SeedExpiredTicketWithQueuedSuccessor(previousAttendance: false);
+        // Existing successful presence event, not a new gate request at confirmation time.
+        await f.AddGateEvent(1, f.Now);
+        f.Tickets.Clock.Value = f.Now.AddMinutes(6);
+        Assert.Equal("ATTENDANCE_CONFIRMED", (await f.Confirm()).Code);
+        Assert.Equal("Expire", (await f.Tickets.Pass(f.Pass.Sn)).Status);
+        Assert.Equal("Active", (await f.Tickets.Pass(next.Sn)).Status);
+        Assert.Equal(0, await f.HoldCount());
+        var row = await f.Tickets.Transaction(sp => sp.GetRequiredService<IClassAttendanceRepository>()
+            .FindAttendanceAsync(f.Contexts[0].Attendance, default));
+        Assert.Equal(next.Id, row!.PassId);
+    }
+
+    private sealed class TimeoutPolicy : IClassProcessingErrorPolicy
+    {
+        public bool IsTransient(Exception error) => error is TimeoutException;
+    }
+
+    private sealed class FailAfterDebit(IClassSettlementRepository inner) : IClassSettlementRepository
+    {
+        public Task<ClassWorkItem?> FindConfirmationAsync(int sessionSn, string userId, CancellationToken ct)
+            => inner.FindConfirmationAsync(sessionSn, userId, ct);
+        public Task<IReadOnlyList<ClassTicketUsage>> GetUsageAsync(int attendanceSn, CancellationToken ct)
+            => inner.GetUsageAsync(attendanceSn, ct);
+        public async Task<int> DebitAsync(AdmissionTicket ticket, int attendanceSn, DateTime businessAt,
+            DateTime recordedAt, string source, string operatorId, CancellationToken ct)
+        {
+            await inner.DebitAsync(ticket, attendanceSn, businessAt, recordedAt, source, operatorId, ct);
+            throw new TimeoutException("Test-only post-debit timeout.");
+        }
+    }
+
+    private sealed class NeverDispatch : ITurnstileCommandClient
+    {
+        public Task<TurnstileCommandResult> OpenDoorAsync(int controllerSN, int doorNo, CancellationToken ct)
+            => throw new InvalidOperationException("Denied settlement must never dispatch hardware.");
+        public Task<TurnstileCommandResult> QueryStatusAsync(int controllerSN, CancellationToken ct)
+            => throw new NotSupportedException();
+    }
+
     [SqlServerFact]
     public async Task CleanupFailureRollsBackChildrenAndPreservesParentOwnershipForRecovery()
     {
@@ -573,14 +936,64 @@ public sealed class CreditReservationSqlTests
             await AddContext(Now.AddMinutes(startOffsetMinutes));
         }
 
-        public async Task InitializeAdmission()
+        public async Task InitializeAdmission(string type = "PACK")
         {
             // Keep discovery/policy tests away from any existing development schedule.
             Tickets.Clock.Value = new(2099, 9, 6, 10, 0, 0, DateTimeKind.Unspecified);
             var settings = Tickets.Provider.GetRequiredService<ClassProcessingSettings>();
             settings.Enabled = true;
             settings.StartDate = Tickets.Clock.Today();
-            await Initialize(-5, -30);
+            await Initialize(-5, -30, type);
+        }
+
+        public async Task<SqlPassState> SeedExpiredTicketWithQueuedSuccessor(bool previousAttendance)
+        {
+            if (previousAttendance)
+            {
+                var previous = await AddContext(Now.AddDays(-1).AddHours(-2));
+                await Tickets.Transaction(async sp =>
+                {
+                    var repo = sp.GetRequiredService<IClassAttendanceRepository>();
+                    await repo.LockCalendarAsync(default);
+                    var course = (await repo.LockSessionAsync(previous.Session, default))!;
+                    await repo.EnsureJobsAsync(course, Now, default);
+                    var row = (await repo.FindAttendanceAsync(previous.Attendance, default))!;
+                    await repo.UpdateAttendanceAsync(row, row with { Status = "CheckIn", Eligibility = "Eligible", PassId = Pass.Id }, default);
+                    return true;
+                });
+            }
+            using var c = Tickets.Open();
+            Assert.Equal(1, await c.ExecuteAsync("""
+                UPDATE dbo.sdt_ticket_pass SET valid_sdate=@start,valid_edate=@endAt
+                WHERE pass_sn=@pass AND owner_id=@Student;
+                """, new { start = Now.Date.AddDays(-29), endAt = Now.Date.AddDays(-1), pass = Pass.Sn, Student }));
+            var plan = await Tickets.AddPlan();
+            return await Tickets.SeedPass(Student, plan, paidAt: Now.AddDays(-1));
+        }
+
+        public async Task<GatePassageResult> ExecuteGate()
+        {
+            using var c = Tickets.Open();
+            string phone;
+            do { phone = "09" + Random.Shared.Next(100_000_000).ToString("D8", System.Globalization.CultureInfo.InvariantCulture); }
+            while (await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.users WHERE usr_phone=@phone", new { phone }) != 0);
+            Assert.Equal(1, await c.ExecuteAsync("UPDATE dbo.users SET usr_phone=@phone WHERE usr_id=@Student AND usr_name=@Marker",
+                new { phone, Student, Tickets.Marker }));
+            using var scope = Tickets.Provider.CreateScope();
+            var sp = scope.ServiceProvider;
+            var identity = new GymAccessEligibilityService(sp.GetRequiredService<IUserRepository>(),
+                sp.GetRequiredService<IUserRoleRepository>(), sp.GetRequiredService<IStudentProfileRepository>(),
+                sp.GetRequiredService<ICurrentTicketService>(), sp.GetRequiredService<IStudentTicketPassQueryService>(),
+                sp.GetRequiredService<IUnitOfWork>(), Tickets.Clock, NullLogger<GymAccessEligibilityService>.Instance);
+            var sessionId = Guid.NewGuid();
+            // Only a service-level authorization input; no real station/session is created or replaced.
+            var device = new GateDeviceAuthorization(new(1, Tickets.Marker, Tickets.Marker, GateDirection.Entry, true, sessionId),
+                new(sessionId, 1, "Active", Now, null));
+            var service = new GatePassageService(identity, sp.GetRequiredService<IGateDeviceRepository>(),
+                sp.GetRequiredService<IGatePassageRepository>(), sp.GetRequiredService<IStudentProfileRepository>(),
+                sp.GetRequiredService<IUnitOfWork>(), Tickets.Clock, new NeverDispatch(), new TurnstileSettings(),
+                new DeviceTestCommandGate(), NullLogger<GatePassageService>.Instance, sp.GetRequiredService<IClassAdmissionService>());
+            return await service.ExecuteAsync(device, Guid.NewGuid(), phone, default);
         }
 
         public async Task<string> AddBrokenAttendanceCandidate()
@@ -602,20 +1015,75 @@ public sealed class CreditReservationSqlTests
             => Tickets.Transaction(sp => sp.GetRequiredService<IClassAdmissionService>()
                 .PrepareEntryAsync(request, Student, default));
 
-        public async Task<int> RunCoordinator()
+        public async Task FixAttendance()
+        {
+            await AddGateEvent(1, Now);
+            Tickets.Clock.Value = Now.AddMinutes(6);
+            Assert.Equal(1, await RunCoordinator());
+        }
+
+        public async Task<DateTime> AdvanceToSettlement(int millisecondsAfter = 0)
+        {
+            using var c = Tickets.Open();
+            var end = await c.ExecuteScalarAsync<DateTime>("SELECT cls_scdle_arnge_et FROM dbo.cls_scdle_arnge WHERE cls_scdle_arnge_sn=@session",
+                new { session = Contexts[0].Session });
+            Tickets.Clock.Value = end.AddMinutes(10).AddMilliseconds(millisecondsAfter);
+            return end;
+        }
+
+        public async Task<int> UsageCount()
+        {
+            using var c = Tickets.Open();
+            return await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.sdt_ticket_usage_log WHERE attendance_sn=@attendance",
+                new { attendance = Contexts[0].Attendance });
+        }
+
+        public async Task<string?> SettlementState()
+        {
+            using var c = Tickets.Open();
+            return await c.ExecuteScalarAsync<string>("""
+                SELECT i.processing_state FROM dbo.class_processing_item i INNER JOIN dbo.class_processing_job j ON j.job_sn=i.job_sn
+                WHERE j.cls_scdle_arnge_sn=@session AND j.phase='B' AND i.user_id=@Student;
+                """, new { session = Contexts[0].Session, Student });
+        }
+
+        public async Task<AttendanceConfirmationResult> SettleIn(IServiceProvider sp, string source = "Auto_Settlement")
+        {
+            var repo = sp.GetRequiredService<IClassAttendanceRepository>();
+            await repo.LockCalendarAsync(default);
+            var course = (await repo.LockSessionAsync(Contexts[0].Session, default))!;
+            // B's work identity is not used as a new debit identity; attendance is the business key.
+            return await sp.GetRequiredService<ClassSettlementService>().SettleAsync(course,
+                new(0, 0, Student, Contexts[0].Attendance, "Running", 1), default, source);
+        }
+
+        public async Task<int> RunCoordinator(bool failAfterDebit = false)
         {
             using var scope = Tickets.Provider.CreateScope();
             var sp = scope.ServiceProvider;
             var coordinator = new ClassProcessingCoordinator(sp.GetRequiredService<IClassAttendanceRepository>(),
                 sp.GetRequiredService<IClassProcessingRepository>(), sp.GetRequiredService<AttendanceConfirmationService>(),
+                failAfterDebit ? new ClassSettlementService(sp.GetRequiredService<IClassAttendanceRepository>(),
+                    sp.GetRequiredService<ICreditReservationRepository>(), new FailAfterDebit(sp.GetRequiredService<IClassSettlementRepository>()),
+                    sp.GetRequiredService<ITicketPassRepository>(), Tickets.Clock) : sp.GetRequiredService<ClassSettlementService>(),
                 sp.GetRequiredService<IUnitOfWork>(), Tickets.Clock, sp.GetRequiredService<ClassProcessingSettings>(),
-                sp.GetRequiredService<IClassProcessingErrorPolicy>(), NullLogger<ClassProcessingCoordinator>.Instance);
+                failAfterDebit ? new TimeoutPolicy() : sp.GetRequiredService<IClassProcessingErrorPolicy>(), NullLogger<ClassProcessingCoordinator>.Instance);
             return await coordinator.RunOnceAsync(default);
         }
 
         public Task<IReadOnlyList<CreditReservation>> Holds()
             => Tickets.Transaction(sp => sp.GetRequiredService<ICreditReservationRepository>()
                 .GetByAttendanceAsync(Contexts[0].Attendance, default));
+
+        public async Task<(string State, int Attempts)> SettlementAttempts()
+        {
+            using var c = Tickets.Open();
+            return await c.QuerySingleAsync<(string State, int Attempts)>("""
+                SELECT i.processing_state,i.processing_attempts FROM dbo.class_processing_item i
+                INNER JOIN dbo.class_processing_job j ON j.job_sn=i.job_sn
+                WHERE j.cls_scdle_arnge_sn=@session AND j.phase='B' AND i.user_id=@Student;
+                """, new { session = Contexts[0].Session, Student });
+        }
 
         public Task<ClassCompletion> CompleteGate(Guid request, string outcome, bool simulated = false)
             => Tickets.Transaction(async sp =>
@@ -734,6 +1202,20 @@ public sealed class CreditReservationSqlTests
                     foreach (var owner in ownedStudents)
                         if (await c.ExecuteScalarAsync<string>("SELECT usr_name FROM dbo.users WHERE usr_id=@owner", new { owner }, tx) != Tickets.Marker)
                             throw new InvalidOperationException("Additional test student ownership mismatch.");
+                    foreach (var attendance in attendances)
+                    {
+                        var usageOwners = await c.QueryAsync<string?>("""
+                            SELECT p.owner_id FROM dbo.sdt_ticket_usage_log u LEFT JOIN dbo.sdt_ticket_pass p ON p.pass_id=u.pass_id
+                            WHERE u.attendance_sn=@attendance;
+                            """, new { attendance }, tx);
+                        if (usageOwners.Any(owner => owner is null || !ownedStudents.Contains(owner)))
+                            throw new InvalidOperationException("Usage cleanup ownership mismatch.");
+                        foreach (var owner in ownedStudents)
+                            await c.ExecuteAsync("""
+                                DELETE u FROM dbo.sdt_ticket_usage_log u INNER JOIN dbo.sdt_ticket_pass p ON p.pass_id=u.pass_id
+                                WHERE u.attendance_sn=@attendance AND p.owner_id=@owner;
+                                """, new { attendance, owner }, tx);
+                    }
                     foreach (var owner in ownedStudents)
                         await c.ExecuteAsync("DELETE dbo.device_record WHERE usr_id=@owner AND device_id=@Marker",
                             new { owner, Tickets.Marker }, tx);

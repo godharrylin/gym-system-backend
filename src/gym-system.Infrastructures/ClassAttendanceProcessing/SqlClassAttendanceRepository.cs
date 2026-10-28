@@ -211,11 +211,15 @@ internal sealed class SqlClassAttendanceRepository(ISqlSession sql, IScheduleSes
             """, new { userId, classStart }, ct));
     }
 
-    public async Task<IReadOnlyList<string>> GetCandidatesAsync(int sessionSn, DateOnly day, CancellationToken ct)
+    public async Task<IReadOnlyList<string>> GetCandidatesAsync(int sessionSn, DateOnly day, CancellationToken ct, bool includeGateHistory = true)
         => (await sql.Connection.QueryAsync<string>(Command("""
             SELECT user_id FROM dbo.sdt_att_record WHERE cls_scdle_arnge_sn=@sessionSn
             UNION
-            SELECT usr_id FROM dbo.device_record WHERE usr_id IS NOT NULL AND identity_kind='Student'
+            SELECT i.user_id FROM dbo.class_processing_item i
+                INNER JOIN dbo.class_processing_job j ON j.job_sn=i.job_sn
+                WHERE j.cls_scdle_arnge_sn=@sessionSn AND j.phase='A'
+            UNION
+            SELECT usr_id FROM dbo.device_record WHERE @includeGateHistory=1 AND usr_id IS NOT NULL AND identity_kind='Student'
                 AND COALESCE(requested_at,device_record_dt)>=@start AND COALESCE(requested_at,device_record_dt)<@finish;
-            """, new { sessionSn, start = day.ToDateTime(TimeOnly.MinValue), finish = day.AddDays(1).ToDateTime(TimeOnly.MinValue) }, ct))).AsList();
+            """, new { sessionSn, includeGateHistory, start = day.ToDateTime(TimeOnly.MinValue), finish = day.AddDays(1).ToDateTime(TimeOnly.MinValue) }, ct))).AsList();
 }

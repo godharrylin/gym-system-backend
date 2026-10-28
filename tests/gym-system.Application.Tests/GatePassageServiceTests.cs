@@ -23,6 +23,8 @@ public sealed class GatePassageServiceTests
         Assert.Equal(0, f.Turnstile.Calls);
         Assert.Equal(1, f.Classes.Preparations);
         Assert.Equal("Denied", f.Classes.LastOutcome);
+        Assert.Equal(1, f.Eligibility.IdentityChecks);
+        Assert.Equal(0, f.Eligibility.BasicTicketChecks);
     }
 
     [Fact]
@@ -38,6 +40,8 @@ public sealed class GatePassageServiceTests
         Assert.Equal(1, f.Turnstile.Calls);
         Assert.Equal(1, f.Profiles.Updates);
         Assert.Equal(2, f.Work.Commits);
+        Assert.Equal(1, f.Eligibility.IdentityChecks);
+        Assert.Equal(0, f.Eligibility.BasicTicketChecks);
     }
 
     [Fact]
@@ -170,10 +174,12 @@ public sealed class GatePassageServiceTests
         public readonly FakeProfiles Profiles = new();
         public readonly FakeWork Work = new();
         public readonly FakeTurnstile Turnstile = new();
+        public readonly FakeEligibility Eligibility;
         public FakeClasses? Classes;
         private readonly GateDeviceAuthorization device;
         public Fixture(GateDirection direction)
         {
+            Eligibility = new(() => Check);
             Turnstile.IsTransactionOpen = () => Work.InTransaction;
             var id = Guid.NewGuid();
             device = new(new(1, direction == GateDirection.Entry ? "ENTRY_MAIN" : "EXIT_MAIN", "gate",
@@ -181,7 +187,7 @@ public sealed class GatePassageServiceTests
         }
         public Task<GatePassageResult> Execute(Guid? id = null)
         {
-            var service = new GatePassageService(new FakeEligibility(() => Check), new DeviceRepository(device), Records, Profiles, Work,
+            var service = new GatePassageService(Eligibility, new DeviceRepository(device), Records, Profiles, Work,
                 new FakeClock(), Turnstile, new TurnstileSettings { EntryDoorNo = 1, ExitDoorNo = 2 },
                 new DeviceTestCommandGate(), NullLogger<GatePassageService>.Instance, Classes);
             return service.ExecuteAsync(device, id ?? Guid.NewGuid(), "0912345678", default);
@@ -199,7 +205,11 @@ public sealed class GatePassageServiceTests
 
     private sealed class FakeEligibility(Func<GymAccessEligibilityResult> result) : IGymAccessEligibilityService
     {
-        public Task<GymAccessEligibilityResult> CheckEntryAsync(string? phone, CancellationToken ct = default) => Task.FromResult(result());
+        public int IdentityChecks, BasicTicketChecks;
+        public Task<GymAccessEligibilityResult> IdentifyEntryAsync(string? phone, CancellationToken ct = default)
+        { IdentityChecks++; return Task.FromResult(result()); }
+        public Task<GymAccessEligibilityResult> CheckEntryAsync(string? phone, CancellationToken ct = default)
+        { BasicTicketChecks++; return Task.FromResult(result()); }
         public Task<GymAccessEligibilityResult> CheckExitAsync(string? phone, CancellationToken ct = default) => Task.FromResult(result());
     }
 

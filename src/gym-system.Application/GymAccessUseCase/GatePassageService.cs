@@ -38,7 +38,9 @@ public sealed class GatePassageService(
         if (prior is not null) return Replay(prior);
 
         var check = device.Station.Direction == GateDirection.Entry
-            ? await eligibility.CheckEntryAsync(phone, ct)
+            ? classes is null
+                ? await eligibility.CheckEntryAsync(phone, ct)
+                : await eligibility.IdentifyEntryAsync(phone, ct)
             : await eligibility.CheckExitAsync(phone, ct);
         var identity = Identity(check);
         var roles = JsonSerializer.Serialize(check.ActiveRoles.Select(x => x.ToString()));

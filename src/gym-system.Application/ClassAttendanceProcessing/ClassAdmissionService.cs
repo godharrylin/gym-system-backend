@@ -19,7 +19,7 @@ public interface IClassAdmissionService
 public sealed class ClassAdmissionService(IClassAttendanceRepository attendance,
     ICreditReservationRepository reservations, CreditReservationService credits,
     ITicketPassRepository passes, ICurrentTicketService currentTickets, IStudentProfileRepository profiles,
-    IClock clock, ClassProcessingSettings settings) : IClassAdmissionService
+    IClock clock, ClassProcessingSettings settings, IClassProcessingRepository work) : IClassAdmissionService
 {
     public Task LockAsync(CancellationToken ct) => attendance.LockCalendarAsync(ct);
 
@@ -62,8 +62,15 @@ public sealed class ClassAdmissionService(IClassAttendanceRepository attendance,
             return new(true, decision.Code, "符合原課程回場資格。");
         }
 
-        if (await attendance.GetPriorUnsettledAsync(studentId, course.StartAt, ct) is not null)
+        if (await attendance.GetPriorUnsettledAsync(studentId, course.StartAt, ct) is long priorItem)
+        {
+            var progress = await work.GetSettlementProgressAsync(priorItem, studentId, now, ct);
+            if (progress?.Running == true)
+                return new(false, "PREVIOUS_SETTLEMENT_PROCESSING", "上一堂結算處理中，請稍後重新輸入電話並確認進場");
+            if (progress?.State is "Failed" or "NeedsReview")
+                return new(false, "PREVIOUS_SETTLEMENT_REVIEW", "上一堂結算未完成：" + progress.Message + " 請洽工作人員。");
             return new(false, "PREVIOUS_SETTLEMENT_PENDING", "上一堂尚未完成結算，請洽工作人員；不是票券不足。");
+        }
         var current = await currentTickets.ReconcileAsync(studentId, now, "SYSTEM", ct);
         var ticket = current is null ? null : await attendance.FindTicketAsync(studentId, current.TicketId, ct);
         if (ticket?.UsableAt(now) != true) return new(false, "CLASS_NO_USABLE_TICKET", "目前沒有可用票券。");

@@ -13,6 +13,51 @@ namespace gym_system.Application.Tests;
 
 public sealed class GymAccessEligibilityServiceTests
 {
+    [Fact]
+    public async Task GateIdentityCheckDoesNotReconcileTicketsOrStartTransaction()
+    {
+        var f = new Fixture();
+        f.Passes.Snapshot = null;
+        f.History.Error = new InvalidOperationException("Identity checks must not read ticket history.");
+        var result = await f.Service.IdentifyEntryAsync(" 0912345678 ");
+        Assert.True(result.BasicEligibilityPassed);
+        Assert.True(result.RequiresClassAndReservationCheck);
+        Assert.Equal("GYM_STUDENT_IDENTIFIED", result.Code);
+        Assert.Null(result.CurrentTicket);
+        Assert.Equal(0, f.Passes.Reconciliations);
+        Assert.Equal(0, f.Profiles.Updates);
+        Assert.Equal(0, f.Work.Begins);
+    }
+
+    [Fact]
+    public async Task GateIdentityCheckStillRejectsMissingStudentProfile()
+    {
+        var f = new Fixture();
+        f.Profiles.Profile = null;
+        var result = await f.Service.IdentifyEntryAsync("0912345678");
+        Assert.False(result.BasicEligibilityPassed);
+        Assert.Equal("GYM_STUDENT_PROFILE_MISSING", result.Code);
+        Assert.Equal(0, f.Passes.Reconciliations);
+        Assert.Equal(0, f.Work.Begins);
+    }
+
+    [Theory]
+    [InlineData(UserRoleCode.Admin)]
+    [InlineData(UserRoleCode.Staff)]
+    [InlineData(UserRoleCode.Instructor)]
+    public async Task GateIdentityCheckPreservesStaffPrecedenceWithoutTicketWrites(UserRoleCode role)
+    {
+        var f = new Fixture();
+        f.Roles.Items = [Role(role), Role(UserRoleCode.Student)];
+        f.Profiles.Profile = null;
+        var result = await f.Service.IdentifyEntryAsync("0912345678");
+        Assert.True(result.BasicEligibilityPassed);
+        Assert.Equal(GymAccessIdentityKind.Staff, result.IdentityKind);
+        Assert.False(result.RequiresClassAndReservationCheck);
+        Assert.Equal(0, f.Passes.Reconciliations);
+        Assert.Equal(0, f.Work.Begins);
+    }
+
     private static readonly DateTime Now = new(2026, 10, 16, 19, 5, 30, 125);
     private static readonly DateOnly Today = DateOnly.FromDateTime(Now);
 

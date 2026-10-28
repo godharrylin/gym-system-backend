@@ -51,6 +51,9 @@ namespace gym_system.Infrastructures
             services.AddScoped<gym_system.Domain.ClassAttendanceProcessing.IClassProcessingRepository,
                 ClassAttendanceProcessing.SqlClassProcessingRepository>();
             services.AddScoped<gym_system.Application.ClassAttendanceProcessing.AttendanceConfirmationService>();
+            services.AddScoped<gym_system.Application.ClassAttendanceProcessing.ClassSettlementService>();
+            services.AddScoped<gym_system.Domain.ClassAttendanceProcessing.IClassSettlementRepository,
+                ClassAttendanceProcessing.SqlClassSettlementRepository>();
             services.AddScoped<gym_system.Application.ClassAttendanceProcessing.ClassProcessingCoordinator>();
             services.AddSingleton<gym_system.Application.ClassAttendanceProcessing.IClassProcessingErrorPolicy,
                 ClassAttendanceProcessing.SqlClassProcessingErrorPolicy>();

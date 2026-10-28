@@ -18,7 +18,7 @@ public sealed class GymAccessEligibilityService(
     IClock clock,
     ILogger<GymAccessEligibilityService> logger) : IGymAccessEligibilityService
 {
-    public async Task<GymAccessEligibilityResult> CheckEntryAsync(string? phone, CancellationToken ct = default)
+    public async Task<GymAccessEligibilityResult> IdentifyEntryAsync(string? phone, CancellationToken ct = default)
     {
         var now = clock.Now();
         var (user, error) = await IdentifyAsync(phone, now, ct);
@@ -37,12 +37,26 @@ public sealed class GymAccessEligibilityService(
             return Reject("GYM_STUDENT_PROFILE_MISSING", "會員資料異常，請洽工作人員", now,
                 member.Id, activeRoles);
 
+        return Passed("GYM_STUDENT_IDENTIFIED", "學生身分確認完成，仍須驗證課程、前置結算與票券額度", now,
+            member.Id, GymAccessIdentityKind.Student, activeRoles);
+    }
+
+    public async Task<GymAccessEligibilityResult> CheckEntryAsync(string? phone, CancellationToken ct = default)
+    {
+        // Preserve the stage-01 basic-ticket check for its existing callers. The actual
+        // gate uses IdentifyEntryAsync and defers all ticket writes to class admission.
+        var identified = await IdentifyEntryAsync(phone, ct);
+        if (!identified.BasicEligibilityPassed || identified.IdentityKind != GymAccessIdentityKind.Student)
+            return identified;
+        var now = identified.EvaluatedAt;
+        var userId = identified.UserId!;
+
         // Own one transaction here. The shared lifecycle service never starts another.
         CurrentTicketSnapshot? ticket;
         await unitOfWork.BeginAsync(ct);
         try
         {
-            ticket = await currentTickets.ReconcileAsync(member.Id, now, "SYSTEM", ct);
+            ticket = await currentTickets.ReconcileAsync(userId, now, "SYSTEM", ct);
             await unitOfWork.CommitAsync(ct);
         }
         catch
@@ -55,16 +69,16 @@ public sealed class GymAccessEligibilityService(
         {
             // History only explains a refusal. It NEVER grants authorization, and is read
             // after commit because the query service uses its own SQL connection.
-            var history = await ticketHistory.GetByStudentIdAsync(member.Id, ct);
+            var history = await ticketHistory.GetByStudentIdAsync(userId, ct);
             var (code, message) = DescribeUnavailable(history.FirstOrDefault());
-            return Reject(code, message, now, member.Id, activeRoles);
+            return Reject(code, message, now, userId, identified.ActiveRoles);
         }
         var issue = ValidateTicket(ticket, DateOnly.FromDateTime(now));
         if (issue is not null)
-            return Reject(issue.Value.Code, issue.Value.Message, now, member.Id, activeRoles);
+            return Reject(issue.Value.Code, issue.Value.Message, now, userId, identified.ActiveRoles);
 
         return Passed("GYM_STUDENT_BASIC_ELIGIBLE", "基本票券資格通過，仍須驗證課程與額度占用", now,
-            member.Id, GymAccessIdentityKind.Student, activeRoles) with { CurrentTicket = ticket };
+            userId, GymAccessIdentityKind.Student, identified.ActiveRoles) with { CurrentTicket = ticket };
     }
 
     public async Task<GymAccessEligibilityResult> CheckExitAsync(string? phone, CancellationToken ct = default)

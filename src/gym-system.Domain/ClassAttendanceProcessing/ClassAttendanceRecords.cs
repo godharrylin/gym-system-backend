@@ -64,5 +64,5 @@ public interface IClassAttendanceRepository
     Task<ClassGateContext?> GetRequestContextAsync(Guid requestId, string userId, CancellationToken ct);
     Task EnsureJobsAsync(CourseSessionWindow course, DateTime now, CancellationToken ct);
     Task<long?> GetPriorUnsettledAsync(string userId, DateTime classStart, CancellationToken ct);
-    Task<IReadOnlyList<string>> GetCandidatesAsync(int sessionSn, DateOnly day, CancellationToken ct);
+    Task<IReadOnlyList<string>> GetCandidatesAsync(int sessionSn, DateOnly day, CancellationToken ct, bool includeGateHistory = true);
 }
