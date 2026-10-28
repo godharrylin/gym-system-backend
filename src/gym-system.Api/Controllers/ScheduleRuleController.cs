@@ -4,12 +4,14 @@ using gym_system.Application.ScheduleRulesUseCase.Commands.DeleteScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Commands.UpdateScheduleRule;
 using gym_system.Application.ScheduleRulesUseCase.Queries;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace gym_system.Api.Controllers
 {
     //  排課模板
 
     [ApiController]
+    [Authorize(Roles = "Admin")]
     [Route("api/v1/schedule-rules")]
     public class ScheduleRuleController : ControllerBase
     {

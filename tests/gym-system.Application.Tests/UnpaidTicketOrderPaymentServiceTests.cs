@@ -1,4 +1,5 @@
 using gym_system.Application.OrdersUseCase.Services;
+using gym_system.Application.TicketsUseCase.Services;
 using gym_system.Application.TicketPlansUseCase.Queries;
 using gym_system.Domain.Entities.Members;
 using gym_system.Domain.Entities.Orders;
@@ -92,7 +93,8 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
                 new RenewalTicketPassEligibilityService(PassRepository),
                 OrderRepository,
                 PassRepository,
-                new FakeClock());
+                new FakeClock(),
+                new CurrentTicketService(PassRepository, ProfileRepository));
         }
 
         public UnpaidTicketOrderPaymentService Service { get; }
@@ -186,7 +188,7 @@ public sealed class UnpaidTicketOrderPaymentServiceTests
         {
             var pass = Assert.Single(Passes);
             pass.Activate(today);
-            return Task.FromResult<CurrentTicketSnapshot?>(pass.ToSnapshot());
+            return Task.FromResult<CurrentTicketSnapshot?>(pass.ToSnapshot(updatedAt));
         }
     }
 

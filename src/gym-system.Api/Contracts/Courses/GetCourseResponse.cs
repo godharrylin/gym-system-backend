@@ -9,6 +9,7 @@
     {
         public required string Id { get; set; }
         public required string Name { get; set; }
+        public string InstructorId { get; set; } = string.Empty;
         public string Instructor { get; set; } = string.Empty;
         public string Color { get; set; } = string.Empty;
         /// <summary>

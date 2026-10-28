@@ -1,22 +1,23 @@
 using gym_system.Domain.Repositories;
+using gym_system.Application.TicketsUseCase.Services;
 
 namespace gym_system.Application.TicketsUseCase.Commands.CancelQueuedRenewal
 {
     public sealed class CancelQueuedRenewalHandler
     {
         private readonly ITicketPassRepository _ticketPassRepository;
-        private readonly IStudentProfileRepository _studentProfileRepository;
+        private readonly ICurrentTicketService _currentTickets;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IClock _clock;
 
         public CancelQueuedRenewalHandler(
             ITicketPassRepository ticketPassRepository,
-            IStudentProfileRepository studentProfileRepository,
+            ICurrentTicketService currentTickets,
             IUnitOfWork unitOfWork,
             IClock clock)
         {
             _ticketPassRepository = ticketPassRepository;
-            _studentProfileRepository = studentProfileRepository;
+            _currentTickets = currentTickets;
             _unitOfWork = unitOfWork;
             _clock = clock;
         }
@@ -40,25 +41,7 @@ namespace gym_system.Application.TicketsUseCase.Commands.CancelQueuedRenewal
                     now,
                     operatorId,
                     ct) ?? throw new KeyNotFoundException("票券不存在");
-                var snapshot = await _ticketPassRepository.ReconcileCurrentAsync(
-                    cancelled.OwnerId,
-                    DateOnly.FromDateTime(now),
-                    now,
-                    operatorId,
-                    ct);
-                var updated = snapshot is null
-                    ? await _studentProfileRepository.ClearCurrentTicketAsync(
-                        cancelled.OwnerId,
-                        now,
-                        ct)
-                    : await _studentProfileRepository.UpdateCurrentTicketAsync(
-                        cancelled.OwnerId,
-                        snapshot,
-                        ct);
-                if (!updated)
-                {
-                    throw new InvalidOperationException("更新會員票券快照失敗");
-                }
+                await _currentTickets.ReconcileAsync(cancelled.OwnerId, now, operatorId, ct);
 
                 await _unitOfWork.CommitAsync(ct);
             }

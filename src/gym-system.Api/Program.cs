@@ -1,6 +1,9 @@
 using System.Text;
+using gym_system.Application.GateDevicesUseCase;
+using gym_system.Application.GymAccessUseCase;
 using gym_system.Application.DevicesUseCase;
 using gym_system.Infrastructures.Devices;
+using gym_system.Api.Devices;
 using gym_system.Api.Authentication;
 using gym_system.Api.Errors;
 using gym_system.Application.AuthUseCase.LoginByPhone;
@@ -78,16 +81,10 @@ builder.Services
         };
     });
 builder.Services.AddAuthorization();
+var gateDeviceSettings = builder.Configuration.GetSection("GateDevices").Get<GateDeviceSettings>() ?? new();
+builder.Services.AddGateDevices(gateDeviceSettings);
 var turnstileSettings = builder.Configuration.GetSection("Turnstile").Get<TurnstileSettings>() ?? new();
-turnstileSettings.Validate();
-builder.Services.AddSingleton(turnstileSettings);
-builder.Services.AddSingleton<DeviceTestCommandGate>();
-builder.Services.AddScoped<SendDeviceTestCommandHandler>();
-builder.Services.AddHttpClient<ITurnstileCommandClient, CloudServerTurnstileClient>(client =>
-{
-    client.BaseAddress = new Uri(turnstileSettings.BaseUrl);
-    client.Timeout = Timeout.InfiniteTimeSpan;
-}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddTurnstileControl(turnstileSettings, builder.Environment.IsProduction());
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
@@ -100,6 +97,11 @@ builder.Services.AddCors(options =>
 });
 /* SQL Connection */
 builder.Services.AddInfrastructureSql();
+var classProcessingSettings = builder.Configuration.GetSection("ClassProcessing")
+    .Get<gym_system.Application.ClassAttendanceProcessing.ClassProcessingSettings>() ?? new();
+classProcessingSettings.Validate();
+builder.Services.AddSingleton(classProcessingSettings);
+builder.Services.AddHostedService<gym_system.Api.ClassAttendanceProcessing.ClassProcessingBackgroundService>();
 builder.Services.AddScoped<IAuthTokenGenerator, JwtAuthTokenGenerator>();
 builder.Services.AddScoped<IRefreshTokenValidator, JwtRefreshTokenValidator>();
 builder.Services.AddScoped<IUserPermissionService, UserPermissionService>();
@@ -124,6 +126,7 @@ builder.Services.AddScoped<CreateOrderHandler>();
 builder.Services.AddScoped<PayOrderHandler>();
 builder.Services.AddScoped<CancelQueuedRenewalHandler>();
 builder.Services.AddScoped<GetStudentTicketPassesHandler>();
+builder.Services.AddScoped<IGymAccessEligibilityService, GymAccessEligibilityService>();
 builder.Services.AddScoped<TicketPurchaseService>();
 builder.Services.AddScoped<UnpaidTicketOrderPaymentService>();
 builder.Services.AddScoped<RegisterMemberHandler>();
@@ -141,7 +144,12 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
-app.UseHttpsRedirection();
+app.UseWhen(context => !gateDeviceSettings.AllowHttp ||
+    !context.Request.Path.StartsWithSegments("/api/v1/gate-devices"), branch => branch.UseHttpsRedirection());
+
+app.UseRouting();
+app.UseMiddleware<GateDeviceRequestGuard>();
+app.UseRateLimiter();
 
 app.UseCors("Frontend");
 

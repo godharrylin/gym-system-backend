@@ -1,4 +1,5 @@
 using gym_system.Application.TicketPlansUseCase.Queries;
+using gym_system.Application.TicketsUseCase.Services;
 using gym_system.Domain.Entities.Tickets;
 using gym_system.Domain.Enums;
 using gym_system.Domain.Exceptions;
@@ -20,6 +21,7 @@ namespace gym_system.Application.OrdersUseCase.Services
         private readonly IOrderRepository _orderRepository;
         private readonly ITicketPassRepository _ticketPassRepository;
         private readonly IClock _clock;
+        private readonly ICurrentTicketService _currentTickets;
 
         public UnpaidTicketOrderPaymentService(
             IUserRepository userRepository,
@@ -31,7 +33,8 @@ namespace gym_system.Application.OrdersUseCase.Services
             RenewalTicketPassEligibilityService renewalEligibilityService,
             IOrderRepository orderRepository,
             ITicketPassRepository ticketPassRepository,
-            IClock clock)
+            IClock clock,
+            ICurrentTicketService currentTickets)
         {
             _userRepository = userRepository;
             _userRoleRepository = userRoleRepository;
@@ -43,6 +46,7 @@ namespace gym_system.Application.OrdersUseCase.Services
             _orderRepository = orderRepository;
             _ticketPassRepository = ticketPassRepository;
             _clock = clock;
+            _currentTickets = currentTickets;
         }
 
         public async Task PayAsync(
@@ -184,25 +188,7 @@ namespace gym_system.Application.OrdersUseCase.Services
                 },
                 ct);
 
-            var snapshot = await _ticketPassRepository.ReconcileCurrentAsync(
-                unpaidOrder.BuyerId,
-                DateOnly.FromDateTime(paidAt),
-                paidAt,
-                operatorId,
-                ct);
-            var updated = snapshot is null
-                ? await _studentProfileRepository.ClearCurrentTicketAsync(
-                    unpaidOrder.BuyerId,
-                    paidAt,
-                    ct)
-                : await _studentProfileRepository.UpdateCurrentTicketAsync(
-                    unpaidOrder.BuyerId,
-                    snapshot,
-                    ct);
-            if (!updated)
-            {
-                throw new InvalidOperationException("更新會員票券快照失敗");
-            }
+            await _currentTickets.ReconcileAsync(unpaidOrder.BuyerId, paidAt, operatorId, ct);
         }
 
         private static void ValidateQuantity(string planId, int quantity)

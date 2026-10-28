@@ -447,8 +447,10 @@ namespace gym_system.Infrastructures
             const string currentSql = """
                 SELECT TOP (1)
                     p.pass_id,
+                    p.ticket_plan_kind_code,
                     p.ticket_plan_kind_type,
                     p.valid_status,
+                    p.valid_sdate,
                     p.valid_edate,
                     p.credits_remaining
                 FROM dbo.sdt_ticket_pass AS p
@@ -472,6 +474,9 @@ namespace gym_system.Infrastructures
                 : new CurrentTicketSnapshot
                 {
                     TicketId = current.pass_id,
+                    PlanCode = current.ticket_plan_kind_code,
+                    TicketStartDate = current.valid_sdate is null
+                        ? null : DateOnly.FromDateTime(current.valid_sdate.Value),
                     TicketType = current.ticket_plan_kind_type,
                     TicketValidState = current.valid_status,
                     TicketPaymentState = "Paid",
@@ -577,7 +582,10 @@ namespace gym_system.Infrastructures
                         var paidDate = DateOnly.FromDateTime(next.order_items_paid_at.Value);
                         activationDate = TicketActivationSchedule.GetRenewalStartDate(
                             sourceEndDate,
-                            paidDate);
+                            paidDate,
+                            next.source_end_reason?.Equals(
+                                TicketEndReason.Depleted.ToString(), StringComparison.OrdinalIgnoreCase) == true
+                                ? TicketEndReason.Depleted : TicketEndReason.Expire);
                         if (activationDate > today)
                         {
                             continue;
@@ -842,8 +850,10 @@ namespace gym_system.Infrastructures
         private sealed class ActivePassRow
         {
             public string pass_id { get; init; } = string.Empty;
+            public string ticket_plan_kind_code { get; init; } = string.Empty;
             public string ticket_plan_kind_type { get; init; } = string.Empty;
             public string valid_status { get; init; } = string.Empty;
+            public DateTime? valid_sdate { get; init; }
             public DateTime? valid_edate { get; init; }
             public int? credits_remaining { get; init; }
         }

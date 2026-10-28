@@ -24,11 +24,12 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureSche
             await _unitOfWork.BeginAsync(ct);
             try
             {
+                // Serialize the read-empty-generate sequence across API processes.
+                await _scheduleSessionRepository.AcquireWeekGenerationLockAsync(weekStart, ct);
                 var existingSessions = await _scheduleSessionRepository.GetByWeekAsync(weekStart, weekEnd, ct);
                 if (existingSessions.Count > 0)
                 {
                     await _unitOfWork.CommitAsync(ct);
-                    //  ���S���Q�������ҵ{
                     var notCancelSession = existingSessions.Where(session => session.Status != SessionStatus.Cancel).ToList();
                     return BuildResult(weekStart, weekEnd, "REAL", false, notCancelSession);
                 }
@@ -38,6 +39,8 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureSche
                     .Select(template => ScheduleSession.CreateAutoFromTemplate(template, weekStart))
                     .ToList();
 
+                EnsureGeneratedSessionsDoNotConflict(sessions);
+
                 if (sessions.Count > 0)
                 {
                     await _scheduleSessionRepository.AddRangeAsync(sessions, ct);
@@ -46,7 +49,8 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureSche
                 var ensuredSessions = await _scheduleSessionRepository.GetByWeekAsync(weekStart, weekEnd, ct);
                 await _unitOfWork.CommitAsync(ct);
 
-                return BuildResult(weekStart, weekEnd, "TEMPLATE", ensuredSessions.Count > 0, ensuredSessions);
+                var visibleSessions = ensuredSessions.Where(session => session.Status != SessionStatus.Cancel).ToList();
+                return BuildResult(weekStart, weekEnd, "TEMPLATE", ensuredSessions.Count > 0, visibleSessions);
             }
             catch
             {
@@ -59,6 +63,19 @@ namespace gym_system.Application.ScheduleSessionsUseCase.Command.GetOrEnsureSche
         {
             var daysSinceMonday = ((int)date.DayOfWeek + 6) % 7;
             return date.AddDays(-daysSinceMonday);
+        }
+
+        private static void EnsureGeneratedSessionsDoNotConflict(IReadOnlyList<ScheduleSession> sessions)
+        {
+            var ordered = sessions.OrderBy(session => session.StartAt).ToList();
+            for (var index = 1; index < ordered.Count; index++)
+            {
+                var previous = ordered[index - 1];
+                var current = ordered[index];
+                if (current.StartAt < previous.EndAt.AddMinutes(10))
+                    throw new InvalidOperationException(
+                        $"啟用中的課表模板在 {current.Date:yyyy-MM-dd} 有重疊或未保留十分鐘間隔，無法生成實際場次。");
+            }
         }
 
         private static GetOrEnsureScheduleWeekResult BuildResult(

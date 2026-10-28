@@ -181,6 +181,12 @@ namespace gym_system.Domain.Entities.ScheduleSessions
             UpdateTime = updateTime;
         }
 
+        public void EnsureEditable(DateTime now)
+        {
+            if (now >= StartAt)
+                throw new InvalidOperationException("課程已開始，禁止修改或取消課程");
+        }
+
         public void Cancel(DateTime updateTime)
         {
             if (Status == SessionStatus.Cancel)

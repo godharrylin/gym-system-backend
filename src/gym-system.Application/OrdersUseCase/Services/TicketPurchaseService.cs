@@ -1,4 +1,5 @@
 using gym_system.Application.TicketPlansUseCase.Queries;
+using gym_system.Application.TicketsUseCase.Services;
 using gym_system.Domain.Entities.Orders;
 using gym_system.Domain.Entities.Tickets;
 using gym_system.Domain.Enums;
@@ -21,6 +22,7 @@ namespace gym_system.Application.OrdersUseCase.Services
         private readonly IOrderRepository _orderRepository;
         private readonly ITicketPassRepository _ticketPassRepository;
         private readonly IClock _clock;
+        private readonly ICurrentTicketService _currentTickets;
 
         public TicketPurchaseService(
             IUserRepository userRepository,
@@ -32,7 +34,8 @@ namespace gym_system.Application.OrdersUseCase.Services
             RenewalTicketPassEligibilityService renewalEligibilityService,
             IOrderRepository orderRepository,
             ITicketPassRepository ticketPassRepository,
-            IClock clock)
+            IClock clock,
+            ICurrentTicketService currentTickets)
         {
             _userRepository = userRepository;
             _userRoleRepository = userRoleRepository;
@@ -44,6 +47,7 @@ namespace gym_system.Application.OrdersUseCase.Services
             _orderRepository = orderRepository;
             _ticketPassRepository = ticketPassRepository;
             _clock = clock;
+            _currentTickets = currentTickets;
         }
 
         public async Task<TicketPurchaseResult> PurchaseAsync(
@@ -220,19 +224,7 @@ namespace gym_system.Application.OrdersUseCase.Services
 
                 foreach (var studentId in beneficiaryIds.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 {
-                    var snapshot = await _ticketPassRepository.ReconcileCurrentAsync(
-                        studentId,
-                        _clock.Today(),
-                        buyAt,
-                        operatorId,
-                        ct);
-                    var updated = snapshot is null
-                        ? await _studentProfileRepository.ClearCurrentTicketAsync(studentId, buyAt, ct)
-                        : await _studentProfileRepository.UpdateCurrentTicketAsync(studentId, snapshot, ct);
-                    if (!updated)
-                    {
-                        throw new InvalidOperationException("更新會員票券快照失敗");
-                    }
+                    await _currentTickets.ReconcileAsync(studentId, buyAt, operatorId, ct);
                 }
             }
 

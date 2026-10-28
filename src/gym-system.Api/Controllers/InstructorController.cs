@@ -4,10 +4,12 @@ using gym_system.Application.InstructorsUseCase.Command.CreateInstructor;
 using gym_system.Application.InstructorsUseCase.Command.UpdateInstructor;
 using gym_system.Application.InstructorsUseCase.Queries;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace gym_system.Api.Controllers
 {
     [ApiController]
+    [Authorize(Roles = "Admin")]
     [Route("api/v1/instructors")]
     public class InstructorController : ControllerBase
     {

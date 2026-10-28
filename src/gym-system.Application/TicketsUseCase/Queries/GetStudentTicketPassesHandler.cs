@@ -1,25 +1,23 @@
 using gym_system.Domain.Repositories;
+using gym_system.Application.TicketsUseCase.Services;
 
 namespace gym_system.Application.TicketsUseCase.Queries
 {
     public sealed class GetStudentTicketPassesHandler
     {
         private readonly IStudentTicketPassQueryService _queryService;
-        private readonly ITicketPassRepository _ticketPassRepository;
-        private readonly IStudentProfileRepository _studentProfileRepository;
+        private readonly ICurrentTicketService _currentTickets;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IClock _clock;
 
         public GetStudentTicketPassesHandler(
             IStudentTicketPassQueryService queryService,
-            ITicketPassRepository ticketPassRepository,
-            IStudentProfileRepository studentProfileRepository,
+            ICurrentTicketService currentTickets,
             IUnitOfWork unitOfWork,
             IClock clock)
         {
             _queryService = queryService;
-            _ticketPassRepository = ticketPassRepository;
-            _studentProfileRepository = studentProfileRepository;
+            _currentTickets = currentTickets;
             _unitOfWork = unitOfWork;
             _clock = clock;
         }
@@ -38,27 +36,15 @@ namespace gym_system.Application.TicketsUseCase.Queries
             await _unitOfWork.BeginAsync(ct);
             try
             {
-                var snapshot = await _ticketPassRepository.ReconcileCurrentAsync(
-                    normalizedStudentId,
-                    DateOnly.FromDateTime(now),
-                    now,
-                    "SYSTEM",
-                    ct);
-                var updated = snapshot is null
-                    ? await _studentProfileRepository.ClearCurrentTicketAsync(
-                        normalizedStudentId,
-                        now,
-                        ct)
-                    : await _studentProfileRepository.UpdateCurrentTicketAsync(
-                        normalizedStudentId,
-                        snapshot,
-                        ct);
-                if (!updated)
-                {
-                    throw new KeyNotFoundException("學生不存在或沒有 Profile");
-                }
+                await _currentTickets.ReconcileAsync(normalizedStudentId, now, "SYSTEM", ct);
 
                 await _unitOfWork.CommitAsync(ct);
+            }
+            catch (StudentProfileSnapshotUpdateException ex)
+            {
+                await _unitOfWork.RollbackAsync(CancellationToken.None);
+                // Preserve the existing query endpoint's missing-profile -> 404 behavior.
+                throw new KeyNotFoundException("學生不存在或沒有 Profile", ex);
             }
             catch
             {

@@ -86,6 +86,57 @@ namespace gym_system.Infrastructures
             return rows.Select(ToTemplate).ToList();
         }
 
+        public async Task AcquireWeekGenerationLockAsync(DateOnly weekStart, CancellationToken ct)
+        {
+            await ClassAttendanceProcessing.ClassAttendanceSqlLocks.LockCalendarAsync(_session, ct);
+            const string sql = """
+                DECLARE @result int;
+                EXEC @result = sys.sp_getapplock
+                    @Resource = @Resource,
+                    @LockMode = 'Exclusive',
+                    @LockOwner = 'Transaction',
+                    @LockTimeout = 10000;
+                IF @result < 0
+                    THROW 51000, N'無法取得課表週生成鎖定，請稍後重試。', 1;
+                """;
+
+            var resource = $"gym:schedule-week:{weekStart:yyyy-MM-dd}";
+            var cmd = new CommandDefinition(
+                sql,
+                new { Resource = resource },
+                transaction: _session.Transaction,
+                cancellationToken: ct);
+            await _session.Connection.ExecuteAsync(cmd);
+        }
+
+        public async Task AcquireSessionMutationLockAsync(string sessionId, CancellationToken ct)
+        {
+            await ClassAttendanceProcessing.ClassAttendanceSqlLocks.LockCalendarAsync(_session, ct);
+            const string resolveSql = """
+                SELECT TOP 1 cls_scdle_arnge_id
+                FROM dbo.cls_scdle_arnge
+                WHERE cls_scdle_arnge_id = @SessionId
+                   OR cls_scdle_arnge_sn = TRY_CONVERT(INT, @SessionId);
+                """;
+            var canonicalId = await _session.Connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                resolveSql, new { SessionId = sessionId }, transaction: _session.Transaction, cancellationToken: ct));
+
+            const string sql = """
+                DECLARE @result int;
+                EXEC @result = sys.sp_getapplock
+                    @Resource = @Resource,
+                    @LockMode = 'Exclusive',
+                    @LockOwner = 'Transaction',
+                    @LockTimeout = 10000;
+                IF @result < 0
+                    THROW 51000, N'無法取得課程場次鎖定，請稍後重試。', 1;
+                """;
+
+            var resource = $"gym:schedule-session:{canonicalId ?? $"missing:{sessionId}"}";
+            await _session.Connection.ExecuteAsync(new CommandDefinition(
+                sql, new { Resource = resource }, transaction: _session.Transaction, cancellationToken: ct));
+        }
+
         public async Task<bool> AddAsync(ScheduleSession newSession, CancellationToken ct)
         {
             const string sql = """

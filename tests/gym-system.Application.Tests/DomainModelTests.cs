@@ -97,7 +97,7 @@ public sealed class DomainModelTests
             plan: plan);
         pass.Activate(new DateOnly(2026, 8, 15));
 
-        var snapshot = pass.ToSnapshot();
+        var snapshot = pass.ToSnapshot(new DateTime(2026, 8, 15, 14, 0, 0));
 
         Assert.Equal(expectedTicketType, snapshot.TicketType);
     }
